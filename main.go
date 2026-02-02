@@ -1,11 +1,13 @@
 package main
 
 import (
+	"NotaborEngine/notacollision"
 	"NotaborEngine/notacore"
 	"NotaborEngine/notagl"
 	"NotaborEngine/notamath"
 	"NotaborEngine/notashader"
 	"NotaborEngine/notassets"
+	"fmt"
 	"log"
 )
 
@@ -66,30 +68,72 @@ func main() {
 		Polygon: notagl.CreateTextureQuad(1, 1),
 	}
 
-	rect := notagl.CreateRectangle(notamath.Po2{
-		X: 0,
-		Y: 0,
-	}, 1, 2)
+	rect := notagl.CreateRectangle(1, 1)
 	rect.SetColor(notashader.Yellow)
 	entity.SetSprite(sprite)
 	entity.SetPolygon(rect)
+	entity.SetCollider(notacollision.NewPolygonCollider(rect))
+
+	entity1 := notassets.NewEntity("wall", "Test Wall")
+	rect1 := notagl.CreateRectangle(0.2, 2)
+	rect1.SetColor(notashader.Green)
+	entity1.SetPolygon(rect1)
+	entity1.SetCollider(notacollision.NewPolygonCollider(rect1))
+	entity1.Move(notamath.Vec2{X: 1, Y: 0})
+
+	entity2 := notassets.NewEntity("wall2", "Test Wall")
+	rect2 := notagl.CreateRectangle(0.2, 2)
+	rect2.SetColor(notashader.Red)
+	entity2.SetPolygon(rect2)
+	entity2.SetCollider(notacollision.NewPolygonCollider(rect1))
+	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
 	// draw entity
 	renderLoop.Runnables = []notacore.Runnable{
 		func() error {
-			texture.Bind(0)
 			entity.Draw(win.RunTime.Renderer)
 			return nil
 		},
 	}
 
+	renderLoop.Runnables = append(renderLoop.Runnables,
+		func() error {
+			entity1.Draw(win.RunTime.Renderer)
+			return nil
+		})
+
+	renderLoop.Runnables = append(renderLoop.Runnables,
+		func() error {
+			entity2.Draw(win.RunTime.Renderer)
+			return nil
+		})
+
+	direction := 1.0
+
 	// rotate and move entity
 	logicLoop.Runnables = []notacore.Runnable{
 		func() error {
-			entity.Rotate(0.01)
+			entity.Rotate(float32(direction * 0.01))
+			entity.Move(notamath.Vec2{
+				X: 0.001,
+				Y: 0,
+			}.Mul(float32(direction)))
 			return nil
 		},
 	}
+
+	logicLoop.Runnables = append(logicLoop.Runnables,
+		func() error {
+			if entity.CollidesWith(entity1) {
+				fmt.Println("Entity Collides with Entity")
+				direction *= -1.0
+			}
+			if entity.CollidesWith(entity2) {
+				fmt.Println("Entity Collides with Entity")
+				direction *= -1.0
+			}
+			return nil
+		})
 
 	if err := engine.Run(); err != nil {
 		log.Fatal("Engine run failed:", err)

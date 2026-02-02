@@ -70,11 +70,11 @@ func (e *Entity) Draw(renderer *notagl.Renderer2D) {
 	model := e.Transform.Matrix()
 
 	if e.Polygon != nil {
-		renderer.Submit(e.Polygon, model)
+		renderer.Submit(e.Polygon, model, nil)
 	}
 
 	if e.Sprite != nil && e.Sprite.Polygon != nil {
-		renderer.Submit(e.Sprite.Polygon, model)
+		renderer.Submit(e.Sprite.Polygon, model, e.Sprite.Texture)
 	}
 }
 

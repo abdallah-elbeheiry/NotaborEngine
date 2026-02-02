@@ -111,18 +111,6 @@ func (t *Texture) CreateGLTexture() error {
 	return nil
 }
 
-func (t *Texture) Bind(unit uint32) {
-	if !t.Loaded {
-		panic("texture not loaded into OpenGL")
-	}
-	gl.ActiveTexture(gl.TEXTURE0 + unit)
-	gl.BindTexture(gl.TEXTURE_2D, t.ID)
-}
-
-func (t *Texture) Unbind() {
-	gl.BindTexture(gl.TEXTURE_2D, 0)
-}
-
 func (t *Texture) Delete() {
 	if t.Loaded {
 		gl.DeleteTextures(1, &t.ID)
