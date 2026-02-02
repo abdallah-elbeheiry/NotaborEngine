@@ -13,8 +13,10 @@ type Vertex2D struct {
 	Color notashader.Color
 	UV    notamath.Vec2
 }
+
 type DrawOrder2D struct {
 	Vertices []Vertex2D
+	Texture  *Texture
 }
 
 type Renderer2D struct {
@@ -22,9 +24,8 @@ type Renderer2D struct {
 	CurrentTexture *Texture // Track current texture
 }
 
-func (r *Renderer2D) Submit(p *Polygon, model notamath.Mat3) {
+func (r *Renderer2D) Submit(p *Polygon, model notamath.Mat3, tex *Texture) {
 	var temp []DrawOrder2D
-
 	p.AddToOrders(model, &temp)
 
 	for _, order := range temp {
@@ -32,8 +33,10 @@ func (r *Renderer2D) Submit(p *Polygon, model notamath.Mat3) {
 		if len(tris) == 0 {
 			continue
 		}
+
 		r.Orders = append(r.Orders, DrawOrder2D{
 			Vertices: tris,
+			Texture:  tex,
 		})
 	}
 }
@@ -91,18 +94,20 @@ func (r *Renderer2D) Flush(backend *GLBackend2D) {
 		return
 	}
 
-	var flat []Vertex2D
 	for _, order := range r.Orders {
-		flat = append(flat, order.Vertices...)
+
+		if order.Texture != nil {
+			gl.ActiveTexture(gl.TEXTURE0)
+			gl.BindTexture(gl.TEXTURE_2D, order.Texture.ID)
+		}
+
+		backend.UploadData(order.Vertices)
+		backend.BindVao()
+
+		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(order.Vertices)))
 	}
 
-	if len(flat) == 0 {
-		return
-	}
-
-	backend.UploadData(flat)
-	backend.BindVao()
-	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(flat)))
+	r.Orders = r.Orders[:0]
 }
 
 func Triangulate2D(polygon []Vertex2D) []Vertex2D {

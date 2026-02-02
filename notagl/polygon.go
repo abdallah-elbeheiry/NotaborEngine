@@ -110,7 +110,7 @@ func (p *Polygon) SetHorizontalGradient(left, right notashader.Color) {
 	}
 }
 
-func CreateRectangle(center notamath.Po2, w, h float32) *Polygon {
+func CreateRectangle(w, h float32) *Polygon {
 	hw := w / 2
 	hh := h / 2
 
@@ -127,9 +127,9 @@ func CreateRectangle(center notamath.Po2, w, h float32) *Polygon {
 	return &p
 }
 
-func CreateCircle(center notamath.Po2, radius float32) *Polygon {
+func CreateCircle(radius float32) *Polygon {
 	size := radius * 2
-	return CreateRectangle(center, size, size)
+	return CreateRectangle(size, size)
 }
 
 func IsCCW(poly []notamath.Po2) bool {
