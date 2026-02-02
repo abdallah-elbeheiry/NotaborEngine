@@ -57,15 +57,14 @@ func main() {
 	}
 
 	entity := notassets.NewEntity("quad", "Test Quad")
+	rect := notagl.CreateTextureQuad(0.5, 0.5)
 	sprite := &notassets.Sprite{
 		Texture: texture,
 		Name:    "quadSprite",
-		Polygon: notagl.CreateTextureQuad(1, 1),
+		Polygon: rect,
 	}
-	rect := notagl.CreateRectangle(1, 1)
-	rect.SetColor(notashader.Yellow)
+	rect.SetHorizontalGradient(notashader.White, notashader.Purple)
 	entity.SetSprite(sprite)
-	entity.SetPolygon(rect)
 	entity.SetCollider(notacollision.NewPolygonCollider(rect))
 
 	entity1 := notassets.NewEntity("wall", "Test Wall")
