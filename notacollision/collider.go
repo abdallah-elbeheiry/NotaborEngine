@@ -2,7 +2,6 @@ package notacollision
 
 import (
 	"NotaborEngine/notamath"
-	"math"
 )
 
 type AABBCollider struct {
@@ -12,84 +11,7 @@ type AABBCollider struct {
 
 type Collider interface {
 	AABB() AABBCollider
-	Move(delta notamath.Vec2)
-	Rotate(delta float32)
-}
-
-type CircleCollider struct {
-	Center notamath.Po2
-	Radius float32
-}
-
-type PolygonCollider struct {
-	Vertices []notamath.Po2
-}
-
-func (c *CircleCollider) AABB() AABBCollider {
-	return AABBCollider{
-		Min: notamath.Vec2{
-			X: c.Center.X - c.Radius,
-			Y: c.Center.Y - c.Radius,
-		},
-		Max: notamath.Vec2{
-			X: c.Center.X + c.Radius,
-			Y: c.Center.Y + c.Radius,
-		},
-	}
-}
-
-func (c *CircleCollider) Move(delta notamath.Vec2) {
-	c.Center = c.Center.Add(delta)
-}
-
-func (c *CircleCollider) Rotate(delta float32) {
-	return //rotating doesn't do anything for circles
-}
-
-func (p *PolygonCollider) AABB() AABBCollider {
-	if len(p.Vertices) == 0 {
-		return AABBCollider{}
-	}
-
-	minX := p.Vertices[0].X
-	minY := p.Vertices[0].Y
-	maxX := p.Vertices[0].X
-	maxY := p.Vertices[0].Y
-
-	for i := 1; i < len(p.Vertices); i++ {
-		v := p.Vertices[i]
-
-		if v.X < minX {
-			minX = v.X
-		}
-		if v.Y < minY {
-			minY = v.Y
-		}
-		if v.X > maxX {
-			maxX = v.X
-		}
-		if v.Y > maxY {
-			maxY = v.Y
-		}
-	}
-
-	return AABBCollider{
-		Min: notamath.Vec2{X: minX, Y: minY},
-		Max: notamath.Vec2{X: maxX, Y: maxY},
-	}
-}
-
-func (p *PolygonCollider) Move(delta notamath.Vec2) {
-	for _, vert := range p.Vertices {
-		vert = vert.Add(delta)
-	}
-}
-
-func (p *PolygonCollider) Rotate(delta float32) {
-	for _, vert := range p.Vertices {
-		vert.X += vert.X * float32(math.Cos(float64(delta)))
-		vert.Y += vert.Y * float32(math.Sin(float64(delta)))
-	}
+	UpdateFromTransform(t *notamath.Transform2D)
 }
 
 func BroadPhase(a, b Collider) bool {
@@ -116,6 +38,7 @@ func Intersects(a, b Collider) bool {
 		case *PolygonCollider:
 			return circleVsPolygon(a, b)
 		}
+
 	case *PolygonCollider:
 		switch b := b.(type) {
 		case *CircleCollider:
@@ -128,26 +51,20 @@ func Intersects(a, b Collider) bool {
 	return false
 }
 
-func circleVsCircle(a, b *CircleCollider) bool {
-	dx := a.Center.X - b.Center.X
-	dy := a.Center.Y - b.Center.Y
-	r := a.Radius + b.Radius
-
-	return dx*dx+dy*dy <= r*r
-}
-
 func polygonVsPolygon(a, b *PolygonCollider) bool {
-	nA := len(a.Vertices)
-	nB := len(b.Vertices)
+	aVertices := a.GetWorldVertices()
+	bVertices := b.GetWorldVertices()
 
-	// 1. Edge vs edge
+	nA := len(aVertices)
+	nB := len(bVertices)
+
 	for i := 0; i < nA; i++ {
-		a1 := a.Vertices[i]
-		a2 := a.Vertices[(i+1)%nA]
+		a1 := aVertices[i]
+		a2 := aVertices[(i+1)%nA]
 
 		for j := 0; j < nB; j++ {
-			b1 := b.Vertices[j]
-			b2 := b.Vertices[(j+1)%nB]
+			b1 := bVertices[j]
+			b2 := bVertices[(j+1)%nB]
 
 			if segmentsIntersect(a1, a2, b1, b2) {
 				return true
@@ -155,33 +72,49 @@ func polygonVsPolygon(a, b *PolygonCollider) bool {
 		}
 	}
 
-	if pointInPolygon(a.Vertices[0], b.Vertices) {
+	if pointInPolygon(aVertices[0], bVertices) {
 		return true
 	}
 
-	if pointInPolygon(b.Vertices[0], a.Vertices) {
+	if pointInPolygon(bVertices[0], aVertices) {
 		return true
 	}
 
 	return false
 }
 
+func circleVsCircle(a, b *CircleCollider) bool {
+	aCenter := a.WorldCenter()
+	bCenter := b.WorldCenter()
+
+	dx := aCenter.X - bCenter.X
+	dy := aCenter.Y - bCenter.Y
+
+	r := a.WorldRadius() + b.WorldRadius()
+
+	return dx*dx+dy*dy <= r*r
+}
+
 func circleVsPolygon(c *CircleCollider, p *PolygonCollider) bool {
-	center := notamath.Po2{X: c.Center.X, Y: c.Center.Y}
-	r2 := c.Radius * c.Radius
-	n := len(p.Vertices)
+	center := c.WorldCenter()
+	radius := c.WorldRadius()
+	r2 := radius * radius
+
+	vertices := p.GetWorldVertices()
+	n := len(vertices)
 
 	for i := 0; i < n; i++ {
-		a := p.Vertices[i]
-		b := p.Vertices[(i+1)%n]
+		a := vertices[i]
+		b := vertices[(i+1)%n]
 
 		closest := closestPointOnSegment(a, b, center)
+
 		if center.DistanceSquared(closest) <= r2 {
 			return true
 		}
 	}
 
-	if pointInPolygon(center, p.Vertices) {
+	if pointInPolygon(center, vertices) {
 		return true
 	}
 
