@@ -6,9 +6,8 @@ import (
 )
 
 type Polygon struct {
-	Vertices  []Vertex2D
-	Transform notamath.Transform2D
-	Color     notashader.Color // Default uniform color
+	Vertices []Vertex2D
+	Color    notashader.Color // Default uniform color
 }
 
 func (p *Polygon) SetColor(c notashader.Color) {
@@ -32,14 +31,9 @@ func (p *Polygon) Fixate() {
 		p.Vertices[i].Pos.X -= center.X
 		p.Vertices[i].Pos.Y -= center.Y
 	}
-
-	p.Transform.Position = notamath.Vec2{
-		X: center.X,
-		Y: center.Y,
-	}
 }
 
-func (p *Polygon) AddToOrders(orders *[]DrawOrder2D) {
+func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder2D) {
 	if len(p.Vertices) < 3 {
 		return
 	}
@@ -48,9 +42,8 @@ func (p *Polygon) AddToOrders(orders *[]DrawOrder2D) {
 
 	for i, v := range p.Vertices {
 		verts[i] = v
-		verts[i].Pos = p.Transform.TransformPoint(v.Pos)
+		verts[i].Pos = model.TransformPo2(v.Pos)
 
-		// Fallback to polygon color if vertex color is zero
 		if v.Color == (notashader.Color{}) {
 			verts[i].Color = p.Color
 		}
@@ -117,7 +110,7 @@ func (p *Polygon) SetHorizontalGradient(left, right notashader.Color) {
 	}
 }
 
-func CreateRectangle(center notamath.Po2, w, h float32) Polygon {
+func CreateRectangle(center notamath.Po2, w, h float32) *Polygon {
 	hw := w / 2
 	hh := h / 2
 
@@ -128,15 +121,13 @@ func CreateRectangle(center notamath.Po2, w, h float32) Polygon {
 			{Pos: notamath.Po2{X: +hw, Y: +hh}},
 			{Pos: notamath.Po2{X: -hw, Y: +hh}},
 		},
-		Transform: notamath.NewTransform2D(),
-		Color:     notashader.Color{R: 1, G: 1, B: 1, A: 1},
+		Color: notashader.Color{R: 1, G: 1, B: 1, A: 1},
 	}
 
-	p.Transform.Position = notamath.Vec2{X: center.X, Y: center.Y}
-	return p
+	return &p
 }
 
-func CreateCircle(center notamath.Po2, radius float32) Polygon {
+func CreateCircle(center notamath.Po2, radius float32) *Polygon {
 	size := radius * 2
 	return CreateRectangle(center, size, size)
 }
@@ -205,7 +196,7 @@ func polygonCentroid(poly []Vertex2D) notamath.Po2 {
 	}
 }
 
-func CreateTextureQuad(center notamath.Po2, width, height float32) Polygon {
+func CreateTextureQuad(width, height float32) *Polygon {
 	hw := width / 2
 	hh := height / 2
 
@@ -228,14 +219,7 @@ func CreateTextureQuad(center notamath.Po2, width, height float32) Polygon {
 				UV:  notamath.Vec2{X: 0, Y: 1},
 			},
 		},
-		Transform: notamath.NewTransform2D(),
-		Color:     notashader.White,
+		Color: notashader.White,
 	}
-
-	p.Transform.Position = notamath.Vec2{
-		X: center.X,
-		Y: center.Y,
-	}
-
-	return p
+	return &p
 }

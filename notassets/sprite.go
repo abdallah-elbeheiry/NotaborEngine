@@ -7,10 +7,9 @@ import (
 )
 
 type Sprite struct {
-	Texture             *notagl.Texture
-	Name                string
-	X, Y                float32
-	srcWidth, srcHeight int32
+	Texture *notagl.Texture
+	Name    string
+	Polygon *notagl.Polygon // reusable quad
 }
 
 type SpriteManager struct {
@@ -38,8 +37,6 @@ func (sm *SpriteManager) Create(name string, texture *notagl.Texture) (*Sprite, 
 	sprite := &Sprite{
 		Texture: texture,
 		Name:    name,
-		X:       0,
-		Y:       0,
 	}
 
 	sm.sprites[name] = sprite

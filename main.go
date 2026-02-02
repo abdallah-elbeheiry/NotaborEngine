@@ -63,16 +63,16 @@ func main() {
 	sprite := &notassets.Sprite{
 		Texture: texture,
 		Name:    "quadSprite",
-		X:       0,
-		Y:       0,
+		Polygon: notagl.CreateTextureQuad(1, 1),
 	}
+
+	rect := notagl.CreateRectangle(notamath.Po2{
+		X: 0,
+		Y: 0,
+	}, 1, 2)
+	rect.SetColor(notashader.Yellow)
 	entity.SetSprite(sprite)
-
-	whiteQuad := notagl.CreateTextureQuad(notamath.Po2{X: 0, Y: 0}, 1, 1)
-	entity.SetPolygon(&whiteQuad)
-
-	delta := notamath.Vec2{X: 0.001, Y: 0}
-	dir := 1.0
+	entity.SetPolygon(rect)
 
 	// draw entity
 	renderLoop.Runnables = []notacore.Runnable{
@@ -87,8 +87,6 @@ func main() {
 	logicLoop.Runnables = []notacore.Runnable{
 		func() error {
 			entity.Rotate(0.01)
-
-			entity.Move(delta.Mul(float32(dir)))
 			return nil
 		},
 	}

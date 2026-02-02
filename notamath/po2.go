@@ -30,6 +30,10 @@ func (p Po2) String() string {
 	return fmt.Sprintf("Point2(%f, %f)", p.X, p.Y)
 }
 
+func (p Po2) ToVec2() Vec2 {
+	return Vec2{p.X, p.Y}
+}
+
 func Orient(a, b, c Po2) float32 {
 	return (b.X-a.X)*(c.Y-a.Y) - (b.Y-a.Y)*(c.X-a.X)
 }
