@@ -153,6 +153,14 @@ func (r *RenderLoop) Render() {
 	r.LastTime = now
 }
 
+func (r *RenderLoop) Add(runnable Runnable) {
+	r.Runnables = append(r.Runnables, runnable)
+}
+
+func (l *FixedHzLoop) Add(runnable Runnable) {
+	l.Runnables = append(l.Runnables, runnable)
+}
+
 func (l *FixedHzLoop) Alpha(now time.Time) float32 {
 	l.mu.Lock()
 	last := l.lastTick
