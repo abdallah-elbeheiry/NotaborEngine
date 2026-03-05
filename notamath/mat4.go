@@ -63,134 +63,6 @@ func (m Mat4) Mul(b Mat4) Mat4 {
 	return r
 }
 
-// SmartMul checks common special cases which take less computational time on average
-func (m Mat4) SmartMul(b Mat4) Mat4 {
-
-	if m == Mat4Identity() {
-		return b
-	}
-	if b == Mat4Identity() {
-		return m
-	}
-
-	if !bottomRow0001Check(m, 1e-5) || !bottomRow0001Check(b, 1e-5) {
-		return m.Mul(b)
-	}
-
-	mTransOnly := m.isTranslationOnly()
-	bTransOnly := b.isTranslationOnly()
-
-	if mTransOnly && bTransOnly {
-		return Mat4Translation(Vec3{
-			X: m.M[3] + b.M[3],
-			Y: m.M[7] + b.M[7],
-			Z: m.M[11] + b.M[11],
-		})
-	}
-
-	if mTransOnly {
-		result := b
-		result.M[3] += m.M[3]
-		result.M[7] += m.M[7]
-		result.M[11] += m.M[11]
-		return result
-	}
-
-	if bTransOnly {
-		result := m
-		result.M[3] += b.M[3]
-		result.M[7] += b.M[7]
-		result.M[11] += b.M[11]
-		return result
-	}
-
-	mScaleOnly := m.isScaleOnly()
-	bScaleOnly := b.isScaleOnly()
-
-	if mScaleOnly && bScaleOnly {
-		return Mat4Scale(Vec3{
-			X: m.M[0] * b.M[0],
-			Y: m.M[5] * b.M[5],
-			Z: m.M[10] * b.M[10],
-		})
-	}
-
-	if mScaleOnly {
-		sx, sy, sz := m.M[0], m.M[5], m.M[10]
-
-		return Mat4{M: [16]float32{
-			sx * b.M[0], sx * b.M[1], sx * b.M[2], sx * b.M[3],
-			sy * b.M[4], sy * b.M[5], sy * b.M[6], sy * b.M[7],
-			sz * b.M[8], sz * b.M[9], sz * b.M[10], sz * b.M[11],
-			b.M[12], b.M[13], b.M[14], b.M[15],
-		}}
-	}
-
-	if bScaleOnly {
-		sx, sy, sz := b.M[0], b.M[5], b.M[10]
-
-		return Mat4{M: [16]float32{
-			m.M[0] * sx, m.M[1] * sx, m.M[2] * sx, m.M[3],
-			m.M[4] * sy, m.M[5] * sy, m.M[6] * sy, m.M[7],
-			m.M[8] * sz, m.M[9] * sz, m.M[10] * sz, m.M[11],
-			m.M[12], m.M[13], m.M[14], m.M[15],
-		}}
-	}
-
-	return m.Mul(b)
-}
-
-func (m Mat4) isTranslationOnly() bool {
-	const eps = 1e-5
-	if !offDiagonalZeroCheck(m, eps) {
-		return false
-	}
-	if !floatEqual(m.M[0], 1, eps) ||
-		!floatEqual(m.M[5], 1, eps) ||
-		!floatEqual(m.M[10], 1, eps) {
-		return false
-	}
-	return true
-}
-
-func (m Mat4) isScaleOnly() bool {
-	const eps = 1e-5
-
-	if !offDiagonalZeroCheck(m, eps) {
-		return false
-	}
-
-	// Translation must be zero (last column except M[15])
-	if !floatEqual(m.M[3], 0, eps) ||
-		!floatEqual(m.M[7], 0, eps) ||
-		!floatEqual(m.M[11], 0, eps) {
-		return false
-	}
-	return true
-}
-
-func bottomRow0001Check(m Mat4, eps float32) bool {
-	if !floatEqual(m.M[12], 0, eps) ||
-		!floatEqual(m.M[13], 0, eps) ||
-		!floatEqual(m.M[14], 0, eps) ||
-		!floatEqual(m.M[15], 1, eps) {
-		return false
-	}
-	return true
-}
-
-func offDiagonalZeroCheck(m Mat4, eps float32) bool {
-	if !floatEqual(m.M[1], 0, eps) ||
-		!floatEqual(m.M[2], 0, eps) ||
-		!floatEqual(m.M[4], 0, eps) ||
-		!floatEqual(m.M[6], 0, eps) ||
-		!floatEqual(m.M[8], 0, eps) ||
-		!floatEqual(m.M[9], 0, eps) {
-		return false
-	}
-	return true
-}
-
 func (m Mat4) TransformPo3(p Po3) Po3 {
 	return Po3{
 		X: m.M[0]*p.X + m.M[1]*p.Y + m.M[2]*p.Z + m.M[3],
@@ -211,7 +83,7 @@ func Mat4TRS(pos Vec3, axis Vec3, angle float32, scale Vec3) Mat4 {
 	t := Mat4Translation(pos)
 	r := Mat4RotationAxisAngle(axis, angle)
 	s := Mat4Scale(scale)
-	return t.SmartMul(r).SmartMul(s)
+	return t.Mul(r).Mul(s)
 }
 
 func floatEqual(a, b, eps float32) bool {
