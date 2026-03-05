@@ -7,20 +7,18 @@ import (
 )
 
 type Entity struct {
-	ID   string
-	Name string
-
+	ID        string
+	Name      string
 	Transform notamath.Transform2D
+	Active    bool
+	Visible   bool
 
+	// Components - can be nil
 	Sprite   *Sprite
 	Polygon  *notagl.Polygon
 	Collider notacollision.Collider
-
-	Active  bool
-	Visible bool
 }
 
-// NewEntity creates a basic empty entity
 func NewEntity(id, name string) *Entity {
 	return &Entity{
 		ID:        id,
@@ -31,32 +29,41 @@ func NewEntity(id, name string) *Entity {
 	}
 }
 
-func (e *Entity) SetSprite(s *Sprite) {
+// Builders
+
+func (e *Entity) WithSprite(s *Sprite) *Entity {
 	e.Sprite = s
+	return e
 }
 
-func (e *Entity) SetPolygon(p *notagl.Polygon)         { e.Polygon = p }
-func (e *Entity) SetCollider(c notacollision.Collider) { e.Collider = c }
+func (e *Entity) WithPolygon(p *notagl.Polygon) *Entity {
+	e.Polygon = p
+	return e
+}
 
+func (e *Entity) WithCollider(c notacollision.Collider) *Entity {
+	e.Collider = c
+	return e
+}
+
+// Move and Rotate automatically update collider
 func (e *Entity) Move(delta notamath.Vec2) {
 	if !e.Active {
 		return
 	}
-
 	e.Transform.TranslateBy(delta)
-
-	if e.Collider != nil {
-		e.Collider.UpdateFromTransform(&e.Transform)
-	}
+	e.updateCollider()
 }
 
 func (e *Entity) Rotate(rad float32) {
 	if !e.Active {
 		return
 	}
-
 	e.Transform.RotateBy(rad)
+	e.updateCollider()
+}
 
+func (e *Entity) updateCollider() {
 	if e.Collider != nil {
 		e.Collider.UpdateFromTransform(&e.Transform)
 	}
@@ -72,13 +79,11 @@ func (e *Entity) Draw(renderer *notagl.Renderer2D) {
 	if e.Polygon != nil {
 		renderer.Submit(e.Polygon, model, nil)
 	}
-
 	if e.Sprite != nil && e.Sprite.Polygon != nil {
 		renderer.Submit(e.Sprite.Polygon, model, e.Sprite.Texture)
 	}
 }
 
-// CollidesWith returns true if this entity collides with another
 func (e *Entity) CollidesWith(other *Entity) bool {
 	if e.Collider == nil || other.Collider == nil {
 		return false

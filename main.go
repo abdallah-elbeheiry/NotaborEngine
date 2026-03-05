@@ -21,7 +21,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := &notacore.RenderLoop{MaxHz: 60}
-	logicLoop := &notacore.FixedHzLoop{Hz: 2000}
+	logicLoop := &notacore.FixedHzLoop{Hz: 1000}
 
 	logicLoop.EnableMonitor(time.Second)
 
@@ -59,29 +59,29 @@ func main() {
 		log.Fatal("Failed to use shader:", err)
 	}
 
-	entity := notassets.NewEntity("quad", "Test Quad")
 	rect := notagl.CreateTextureQuad(0.5, 0.5)
 	sprite := &notassets.Sprite{
 		Texture: texture,
 		Name:    "quadSprite",
 		Polygon: rect,
 	}
-	rect.SetHorizontalGradient(notashader.White, notashader.Purple)
-	entity.SetSprite(sprite)
-	entity.SetCollider(notacollision.NewPolygonCollider(rect))
 
-	entity1 := notassets.NewEntity("wall", "Test Wall")
+	entity := notassets.NewEntity("quad", "Test Quad").
+		WithSprite(sprite).
+		WithCollider(notacollision.NewPolygonCollider(rect))
+
 	rect1 := notagl.CreateRectangle(0.2, 2)
+	entity1 := notassets.NewEntity("wall", "Test Wall").
+		WithPolygon(rect1).
+		WithCollider(notacollision.NewPolygonCollider(rect1))
 	rect1.SetColor(notashader.Green)
-	entity1.SetPolygon(rect1)
-	entity1.SetCollider(notacollision.NewPolygonCollider(rect1))
 	entity1.Move(notamath.Vec2{X: 1, Y: 0})
 
-	entity2 := notassets.NewEntity("wall2", "Test Wall")
 	rect2 := notagl.CreateRectangle(0.2, 2)
+	entity2 := notassets.NewEntity("wall2", "Test Wall").
+		WithPolygon(rect2).
+		WithCollider(notacollision.NewPolygonCollider(rect2))
 	rect2.SetColor(notashader.Red)
-	entity2.SetPolygon(rect2)
-	entity2.SetCollider(notacollision.NewPolygonCollider(rect2))
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
 	renderLoop.Add(func() error {

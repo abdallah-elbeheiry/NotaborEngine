@@ -1,111 +1,90 @@
 package notassets
 
 import (
-	"fmt"
 	"sync"
 )
 
-type EntityManager struct {
+type Scene struct {
 	Name     string
-	Entities map[string]*Entity
+	entities map[string]*Entity
 	mu       sync.RWMutex
 }
 
-func NewScene(name string) *EntityManager {
-	return &EntityManager{
+func NewScene(name string) *Scene {
+	return &Scene{
 		Name:     name,
-		Entities: make(map[string]*Entity),
+		entities: make(map[string]*Entity),
 	}
 }
 
-// Add adds an entity to the scene
-func (s *EntityManager) Add(entity *Entity) error {
+// Add an entity (returns the entity for chaining)
+func (s *Scene) Add(entity *Entity) *Entity {
+	if entity == nil || entity.ID == "" {
+		return entity
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if entity == nil {
-		return fmt.Errorf("cannot add nil entity")
-	}
-
-	if entity.ID == "" {
-		return fmt.Errorf("entity must have an ID")
-	}
-
-	if _, exists := s.Entities[entity.ID]; exists {
-		return fmt.Errorf("entity with ID '%s' already exists in scene", entity.ID)
-	}
-
-	s.Entities[entity.ID] = entity
-	return nil
+	s.entities[entity.ID] = entity
+	return entity
 }
 
-// Remove removes an entity from the scene
-func (s *EntityManager) Remove(entityID string) error {
+// Remove an entity
+func (s *Scene) Remove(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if _, exists := s.Entities[entityID]; !exists {
-		return fmt.Errorf("entity with ID '%s' not found in scene", entityID)
-	}
-
-	delete(s.Entities, entityID)
-	return nil
+	delete(s.entities, id)
 }
 
-// Get retrieves an entity by ID
-func (s *EntityManager) Get(entityID string) (*Entity, error) {
+// Get an entity by ID
+func (s *Scene) Get(id string) *Entity {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.entities[id]
+}
+
+// All returns all entities (for iteration)
+func (s *Scene) All() []*Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	entity, exists := s.Entities[entityID]
-	if !exists {
-		return nil, fmt.Errorf("entity with ID '%s' not found in scene", entityID)
+	entities := make([]*Entity, 0, len(s.entities))
+	for _, e := range s.entities {
+		entities = append(entities, e)
 	}
-
-	return entity, nil
+	return entities
 }
 
-// Count returns the number of entities in the scene
-func (s *EntityManager) Count() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.Entities)
-}
-
-// Clear removes all entities from the scene
-func (s *EntityManager) Clear() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Entities = make(map[string]*Entity)
-}
-
-// GetActiveEntities returns all active entities
-func (s *EntityManager) GetActiveEntities() []*Entity {
+// Active returns only active entities
+func (s *Scene) Active() []*Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var active []*Entity
-	for _, entity := range s.Entities {
-		if entity.Active {
-			active = append(active, entity)
+	for _, e := range s.entities {
+		if e.Active {
+			active = append(active, e)
 		}
 	}
-
 	return active
 }
 
-// GetVisibleEntities returns all visible entities
-func (s *EntityManager) GetVisibleEntities() []*Entity {
+// Visible returns only visible entities
+func (s *Scene) Visible() []*Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var visible []*Entity
-	for _, entity := range s.Entities {
-		if entity.Visible {
-			visible = append(visible, entity)
+	for _, e := range s.entities {
+		if e.Visible {
+			visible = append(visible, e)
 		}
 	}
-
 	return visible
+}
+
+// Clear removes all entities
+func (s *Scene) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entities = make(map[string]*Entity)
 }
