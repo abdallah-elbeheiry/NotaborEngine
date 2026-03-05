@@ -46,7 +46,7 @@ func (t *Transform3D) Matrix() Mat4 {
 
 	sc := Mat4Scale(t.Scale)
 
-	t.matrix = tr.SmartMul(rot).SmartMul(sc)
+	t.matrix = tr.Mul(rot).Mul(sc)
 	t.Dirty = false
 	return t.matrix
 }
