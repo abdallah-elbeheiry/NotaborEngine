@@ -127,6 +127,8 @@ func CreateRectangle(w, h float32) *Polygon {
 	return &p
 }
 
+// CreateCircle creates a uniform quad
+// to actually make this into a circle you will use to use the default shader and set UseCircle to true and set radius/edge
 func CreateCircle(radius float32) *Polygon {
 	size := radius * 2
 	return CreateRectangle(size, size)
