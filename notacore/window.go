@@ -28,11 +28,6 @@ type Window interface {
 	SwapBuffers()
 	ShouldClose() bool
 	RunRenderer()
-	CreateShader(shader notashader.Shader) error
-	GetShader(name string) (uint32, error)
-	UpdateShader(shader notashader.Shader) error
-	DeleteShader(name string) uint32
-	UseShader(name string) error
 	SetWindowType(t WindowType) error
 	LoadTexture(name, path string) (*notagl.Texture, error)
 	GetTexture(name string) (*notagl.Texture, error)
@@ -65,7 +60,15 @@ type GlfwWindow2D struct {
 	Handle  *glfw.Window
 	Config  WindowConfig
 	RunTime windowRunTime2D
-	Shaders map[string]uint32
+	Shaders map[string]*notashader.Shader
+}
+
+type GlfwWindow3D struct {
+	ID      int
+	Handle  *glfw.Window
+	Config  WindowConfig
+	RunTime windowRuntime3D
+	Shaders map[string]*notashader.Shader
 }
 
 func (w *GlfwWindow2D) GetConfig() *WindowConfig       { return &w.Config }
@@ -76,15 +79,6 @@ func (w *GlfwWindow2D) RunRenderer() {
 	w.RunTime.Renderer.Flush(w.RunTime.backend)
 }
 func (w *GlfwWindow2D) GLFW() *glfw.Window { return w.Handle }
-
-type GlfwWindow3D struct {
-	ID      int
-	Handle  *glfw.Window
-	Config  WindowConfig
-	RunTime windowRuntime3D
-	Shaders map[string]uint32
-}
-
 func (w *GlfwWindow3D) GLFW() *glfw.Window { return w.Handle }
 
 func (w *GlfwWindow3D) GetConfig() *WindowConfig       { return &w.Config }

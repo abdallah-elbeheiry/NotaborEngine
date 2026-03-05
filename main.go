@@ -46,18 +46,9 @@ func main() {
 		panic(err)
 	}
 
-	texturedShader := notashader.Shader{
-		Name:           "textured",
-		VertexString:   notashader.TexturedVertex2D,
-		FragmentString: notashader.TexturedFragment2D,
-	}
-
-	if err := win.CreateShader(texturedShader); err != nil {
-		log.Fatal("Failed to create shader:", err)
-	}
-	if err := win.UseShader("textured"); err != nil {
-		log.Fatal("Failed to use shader:", err)
-	}
+	shader, _ := win.CreateShader("textured", "notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
+	_ = win.UseShader("textured")
+	shader.SetUniform(notashader.UseTexture, true)
 
 	rect := notagl.CreateTextureQuad(0.5, 0.5)
 	sprite := &notassets.Sprite{
