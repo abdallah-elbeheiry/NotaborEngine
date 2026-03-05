@@ -8,109 +8,112 @@ import (
 )
 
 func (w *GlfwWindow2D) DeleteShader(name string) uint32 {
-	program := w.Shaders[name]
+	shader, ok := w.Shaders[name]
+	if !ok {
+		return 0
+	}
+	gl.DeleteProgram(shader.Program)
 	delete(w.Shaders, name)
-	return program
+	return shader.Program
 }
 
-func (w *GlfwWindow2D) UpdateShader(shader notashader.Shader) error {
-	if w.Shaders == nil {
-		w.Shaders = make(map[string]uint32)
+func (w *GlfwWindow2D) UpdateShader(name string) error {
+	shader, ok := w.Shaders[name]
+	if !ok {
+		return errors.New("shader with name " + name + " not found")
 	}
-	_, err := w.GetShader(shader.Name)
-	if err != nil {
+
+	// Reload shader from files
+	if err := shader.Reload(); err != nil {
 		return err
 	}
 
-	w.Shaders[shader.Name] = notashader.CreateProgram(shader.VertexString, shader.FragmentString)
 	return nil
 }
 
-func (w *GlfwWindow2D) GetShader(name string) (uint32, error) {
-	value, found := w.Shaders[name]
-	if !found {
-		return 0, errors.New("shader with name " + name + " is not found")
+func (w *GlfwWindow2D) GetShader(name string) (*notashader.Shader, error) {
+	shader, ok := w.Shaders[name]
+	if !ok {
+		return nil, errors.New("shader with name " + name + " not found")
 	}
-	return value, nil
+	return shader, nil
 }
 
-func (w *GlfwWindow2D) CreateShader(shader notashader.Shader) error {
+func (w *GlfwWindow2D) CreateShader(name, vertexPath, fragmentPath string) (*notashader.Shader, error) {
 	if w.Shaders == nil {
-		w.Shaders = make(map[string]uint32)
+		w.Shaders = make(map[string]*notashader.Shader)
 	}
 
-	if _, found := w.Shaders[shader.Name]; found {
-		return errors.New("shader with name " + shader.Name + " already exists")
+	if _, found := w.Shaders[name]; found {
+		return nil, errors.New("shader with name " + name + " already exists")
 	}
 
 	w.MakeContextCurrent()
-	w.Shaders[shader.Name] = notashader.CreateProgram(
-		shader.VertexString,
-		shader.FragmentString,
-	)
+	shader := notashader.NewShader(name, vertexPath, fragmentPath)
+	w.Shaders[name] = shader
+	return shader, nil
+}
 
+func (w *GlfwWindow2D) UseShader(name string) error {
+	shader, err := w.GetShader(name)
+	if err != nil {
+		return err
+	}
+	gl.UseProgram(shader.Program)
 	return nil
 }
 
 func (w *GlfwWindow3D) DeleteShader(name string) uint32 {
-	program := w.Shaders[name]
+	shader, ok := w.Shaders[name]
+	if !ok {
+		return 0
+	}
+	gl.DeleteProgram(shader.Program)
 	delete(w.Shaders, name)
-	return program
+	return shader.Program
 }
 
-func (w *GlfwWindow3D) UpdateShader(shader notashader.Shader) error {
-	if w.Shaders == nil {
-		w.Shaders = make(map[string]uint32)
+func (w *GlfwWindow3D) UpdateShader(name string) error {
+	shader, ok := w.Shaders[name]
+	if !ok {
+		return errors.New("shader with name " + name + " not found")
 	}
-	_, err := w.GetShader(shader.Name)
-	if err != nil {
+
+	if err := shader.Reload(); err != nil {
 		return err
 	}
 
-	w.Shaders[shader.Name] = notashader.CreateProgram(shader.VertexString, shader.FragmentString)
 	return nil
 }
 
-func (w *GlfwWindow3D) GetShader(name string) (uint32, error) {
-	value, found := w.Shaders[name]
-	if !found {
-		return 0, errors.New("shader with name " + name + " is not found")
+func (w *GlfwWindow3D) GetShader(name string) (*notashader.Shader, error) {
+	shader, ok := w.Shaders[name]
+	if !ok {
+		return nil, errors.New("shader with name " + name + " not found")
 	}
-	return value, nil
+	return shader, nil
 }
 
-func (w *GlfwWindow3D) CreateShader(shader notashader.Shader) error {
+func (w *GlfwWindow3D) CreateShader(name, vertexPath, fragmentPath string) error {
 	if w.Shaders == nil {
-		w.Shaders = make(map[string]uint32)
+		w.Shaders = make(map[string]*notashader.Shader)
 	}
 
-	if _, found := w.Shaders[shader.Name]; found {
-		return errors.New("shader with name " + shader.Name + " already exists")
+	if _, found := w.Shaders[name]; found {
+		return errors.New("shader with name " + name + " already exists")
 	}
 
 	w.MakeContextCurrent()
-	w.Shaders[shader.Name] = notashader.CreateProgram(
-		shader.VertexString,
-		shader.FragmentString,
-	)
-
-	return nil
-}
-
-func (w *GlfwWindow2D) UseShader(name string) error {
-	program, err := w.GetShader(name)
-	if err != nil {
-		return err
-	}
-	gl.UseProgram(program)
+	shader := notashader.NewShader(name, vertexPath, fragmentPath)
+	w.Shaders[name] = shader
 	return nil
 }
 
 func (w *GlfwWindow3D) UseShader(name string) error {
-	program, err := w.GetShader(name)
+	shader, err := w.GetShader(name)
 	if err != nil {
 		return err
 	}
-	gl.UseProgram(program)
+	gl.UseProgram(shader.Program)
 	return nil
 }
