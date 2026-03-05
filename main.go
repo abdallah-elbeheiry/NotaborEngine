@@ -21,7 +21,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := &notacore.RenderLoop{MaxHz: 60}
-	logicLoop := &notacore.FixedHzLoop{Hz: 5000}
+	logicLoop := &notacore.FixedHzLoop{Hz: 2000}
 
 	logicLoop.EnableMonitor(time.Second)
 

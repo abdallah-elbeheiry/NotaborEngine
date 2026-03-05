@@ -35,7 +35,7 @@ func (e *Engine) Run() error {
 					e.Input.UpdateSignals()
 					return nil
 				}
-				loop.Runnables = append([]Runnable{update}, loop.Runnables...)
+				loop.activeRunnables = append([]Runnable{update}, loop.activeRunnables...)
 			}
 			loop.Start()
 		}
