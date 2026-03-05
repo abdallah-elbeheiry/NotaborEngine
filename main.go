@@ -8,6 +8,7 @@ import (
 	"NotaborEngine/notashader"
 	"NotaborEngine/notassets"
 	"log"
+	"time"
 )
 
 func main() {
@@ -20,7 +21,9 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := &notacore.RenderLoop{MaxHz: 60}
-	logicLoop := &notacore.FixedHzLoop{Hz: 500}
+	logicLoop := &notacore.FixedHzLoop{Hz: 2000}
+
+	logicLoop.EnableMonitor(time.Second)
 
 	cfg := notacore.WindowConfig{
 		X:          50,
