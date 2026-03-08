@@ -15,11 +15,7 @@ const (
 	Borderless
 )
 
-func (w *GlfwWindow2D) SetWindowType(t WindowType) error {
-	return setWindowType(w.Config, w.Handle, t)
-}
-
-func (w *GlfwWindow3D) SetWindowType(t WindowType) error {
+func (w *Window) SetWindowType(t WindowType) error {
 	return setWindowType(w.Config, w.Handle, t)
 }
 

@@ -69,7 +69,7 @@ func (e *Entity) updateCollider() {
 	}
 }
 
-func (e *Entity) Draw(renderer *notagl.Renderer2D) {
+func (e *Entity) Draw(renderer *notagl.Renderer) {
 	if !e.Visible || !e.Active {
 		return
 	}

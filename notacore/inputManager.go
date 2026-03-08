@@ -433,7 +433,7 @@ func (im *InputManager) UpdateSignals() {
 	}
 }
 
-func isInputActive(win Window, input Input, gamepads []*glfw.GamepadState) bool {
+func isInputActive(win *Window, input Input, gamepads []*glfw.GamepadState) bool {
 	if key, ok := glfwKeyMap[input]; ok {
 		return win.GLFW().GetKey(key) == glfw.Press
 	}
@@ -487,7 +487,7 @@ func connectedGamepads() []*glfw.GamepadState {
 	return gamepads
 }
 
-func (im *InputManager) CaptureInputs(windows []Window) {
+func (im *InputManager) CaptureInputs(windows []*Window) {
 	if im.active == nil {
 		im.active = make(map[Input]bool)
 	}

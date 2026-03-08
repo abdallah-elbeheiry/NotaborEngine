@@ -14,18 +14,18 @@ type Vertex2D struct {
 	UV    notamath.Vec2
 }
 
-type DrawOrder2D struct {
+type DrawOrder struct {
 	Vertices []Vertex2D
 	Texture  *Texture
 }
 
-type Renderer2D struct {
-	Orders         []DrawOrder2D
+type Renderer struct {
+	Orders         []DrawOrder
 	CurrentTexture *Texture // Track current texture
 }
 
-func (r *Renderer2D) Submit(p *Polygon, model notamath.Mat3, tex *Texture) {
-	var temp []DrawOrder2D
+func (r *Renderer) Submit(p *Polygon, model notamath.Mat3, tex *Texture) {
+	var temp []DrawOrder
 	p.AddToOrders(model, &temp)
 
 	for _, order := range temp {
@@ -34,26 +34,26 @@ func (r *Renderer2D) Submit(p *Polygon, model notamath.Mat3, tex *Texture) {
 			continue
 		}
 
-		r.Orders = append(r.Orders, DrawOrder2D{
+		r.Orders = append(r.Orders, DrawOrder{
 			Vertices: tris,
 			Texture:  tex,
 		})
 	}
 }
 
-type vertexFormat2D struct {
+type format2D struct {
 	dimension int32 // should be 2
 	stride    int32
 }
 
-type GLBackend2D struct {
+type GLBackend struct {
 	vao    uint32
 	vbo    uint32
-	format vertexFormat2D
+	format format2D
 }
 
-func (b *GLBackend2D) Init() {
-	b.format = vertexFormat2D{
+func (b *GLBackend) Init() {
+	b.format = format2D{
 		dimension: 2,
 		stride:    int32(unsafe.Sizeof(Vertex2D{})),
 	}
@@ -80,16 +80,16 @@ func (b *GLBackend2D) Init() {
 	gl.EnableVertexArrayAttrib(b.vao, 2)
 }
 
-func (b *GLBackend2D) BindVao() {
+func (b *GLBackend) BindVao() {
 	gl.BindVertexArray(b.vao)
 }
 
-func (b *GLBackend2D) UploadData(vertices interface{}) {
+func (b *GLBackend) UploadData(vertices interface{}) {
 	verts := vertices.([]Vertex2D)
 	gl.NamedBufferData(b.vbo, len(verts)*int(b.format.stride), gl.Ptr(verts), gl.DYNAMIC_DRAW)
 }
 
-func (r *Renderer2D) Flush(backend *GLBackend2D) {
+func (r *Renderer) Flush(backend *GLBackend) {
 	if len(r.Orders) == 0 {
 		return
 	}

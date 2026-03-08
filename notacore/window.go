@@ -21,82 +21,42 @@ type WindowConfig struct {
 	RenderLoop *RenderLoop
 }
 
-type Window interface {
-	GetConfig() *WindowConfig
-	GetRuntime() *WindowBaseRuntime
-	MakeContextCurrent()
-	SwapBuffers()
-	ShouldClose() bool
-	RunRenderer()
-	SetWindowType(t WindowType) error
-	LoadTexture(name, path string) (*notagl.Texture, error)
-	GetTexture(name string) (*notagl.Texture, error)
-	UnloadTexture(name string) error
-
-	GLFW() *glfw.Window
-}
-
-type WindowBaseRuntime struct {
+type windowBaseRuntime struct {
 	lastRender time.Time
 	targetDt   time.Duration
 }
 
-type windowRunTime2D struct {
-	WindowBaseRuntime
-	backend    *notagl.GLBackend2D
-	Renderer   *notagl.Renderer2D
+type windowRunTime struct {
+	windowBaseRuntime
+	backend    *notagl.GLBackend
+	Renderer   *notagl.Renderer
 	TextureMgr *notagl.TextureManager
 }
 
-type windowRuntime3D struct {
-	WindowBaseRuntime
-	backend    *notagl.GLBackend3D
-	Renderer   *notagl.Renderer3D
-	TextureMgr *notagl.TextureManager
-}
-
-type GlfwWindow2D struct {
+type Window struct {
 	ID      int
 	Handle  *glfw.Window
 	Config  WindowConfig
-	RunTime windowRunTime2D
+	RunTime windowRunTime
 	Shaders map[string]*notashader.Shader
 }
 
-type GlfwWindow3D struct {
-	ID      int
-	Handle  *glfw.Window
-	Config  WindowConfig
-	RunTime windowRuntime3D
-	Shaders map[string]*notashader.Shader
-}
-
-func (w *GlfwWindow2D) GetConfig() *WindowConfig       { return &w.Config }
-func (w *GlfwWindow2D) GetRuntime() *WindowBaseRuntime { return &w.RunTime.WindowBaseRuntime }
-func (w *GlfwWindow2D) RunRenderer() {
+func (w *Window) GetConfig() *WindowConfig       { return &w.Config }
+func (w *Window) GetRuntime() *windowBaseRuntime { return &w.RunTime.windowBaseRuntime }
+func (w *Window) RunRenderer() {
 	w.RunTime.Renderer.Orders = w.RunTime.Renderer.Orders[:0]
 	w.Config.RenderLoop.Render()
 	w.RunTime.Renderer.Flush(w.RunTime.backend)
 }
-func (w *GlfwWindow2D) GLFW() *glfw.Window { return w.Handle }
-func (w *GlfwWindow3D) GLFW() *glfw.Window { return w.Handle }
-
-func (w *GlfwWindow3D) GetConfig() *WindowConfig       { return &w.Config }
-func (w *GlfwWindow3D) GetRuntime() *WindowBaseRuntime { return &w.RunTime.WindowBaseRuntime }
-func (w *GlfwWindow3D) RunRenderer() {
-	w.RunTime.Renderer.Orders = w.RunTime.Renderer.Orders[:0]
-	w.Config.RenderLoop.Render()
-	w.RunTime.Renderer.Flush(w.RunTime.backend)
-}
+func (w *Window) GLFW() *glfw.Window { return w.Handle }
 
 type windowManager struct {
 	mu        sync.Mutex
-	windows2D []*GlfwWindow2D
-	windows3D []*GlfwWindow3D
+	windows2D []*Window
 	nextID    int
 }
 
-func (wm *windowManager) Create2D(cfg WindowConfig) (*GlfwWindow2D, error) {
+func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
@@ -134,83 +94,17 @@ func (wm *windowManager) Create2D(cfg WindowConfig) (*GlfwWindow2D, error) {
 		return nil, err
 	}
 
-	win := &GlfwWindow2D{
+	win := &Window{
 		ID:     wm.nextID,
 		Handle: handle,
 		Config: cfg,
-		RunTime: windowRunTime2D{
-			WindowBaseRuntime: WindowBaseRuntime{
+		RunTime: windowRunTime{
+			windowBaseRuntime: windowBaseRuntime{
 				lastRender: time.Now(),
 				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz),
 			},
-			backend:    &notagl.GLBackend2D{},
-			Renderer:   &notagl.Renderer2D{},
-			TextureMgr: notagl.NewTextureManager(),
-		},
-	}
-
-	win.MakeContextCurrent()
-	if err := gl.Init(); err != nil {
-		return nil, err
-	}
-
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-	win.RunTime.backend.Init()
-
-	return win, nil
-}
-
-func (wm *windowManager) Create3D(cfg WindowConfig) (*GlfwWindow3D, error) {
-	wm.mu.Lock()
-	defer wm.mu.Unlock()
-
-	if cfg.W <= 0 || cfg.H <= 0 {
-		return nil, errors.New("invalid window size")
-	}
-
-	var monitor *glfw.Monitor
-
-	switch cfg.Type {
-	case Fullscreen:
-		monitor = glfw.GetPrimaryMonitor()
-		if monitor == nil {
-			return nil, errors.New("no primary monitor found")
-		}
-		videoMode := monitor.GetVideoMode()
-		if videoMode == nil {
-			return nil, errors.New("could not get video mode")
-		}
-
-	case Borderless:
-		monitor = glfw.GetPrimaryMonitor()
-		if monitor == nil {
-			return nil, errors.New("no primary monitor found")
-		}
-		videoMode := monitor.GetVideoMode()
-		if videoMode == nil {
-			return nil, errors.New("could not get video mode")
-		}
-
-	default:
-	}
-
-	handle, err := setupWindow(cfg, monitor)
-	if err != nil {
-		return nil, err
-	}
-	win := &GlfwWindow3D{
-		ID:     wm.nextID,
-		Handle: handle,
-		Config: cfg,
-		RunTime: windowRuntime3D{
-			WindowBaseRuntime: WindowBaseRuntime{
-				lastRender: time.Now(),
-				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz),
-			},
-			backend:    &notagl.GLBackend3D{},
-			Renderer:   &notagl.Renderer3D{},
+			backend:    &notagl.GLBackend{},
+			Renderer:   &notagl.Renderer{},
 			TextureMgr: notagl.NewTextureManager(),
 		},
 	}
@@ -232,39 +126,20 @@ func (wm *windowManager) PollEvents() {
 	glfw.PollEvents()
 }
 
-func (w *GlfwWindow2D) MakeContextCurrent()  { w.Handle.MakeContextCurrent() }
-func (w *GlfwWindow2D) SwapBuffers()         { w.Handle.SwapBuffers() }
-func (w *GlfwWindow2D) ShouldClose() bool    { return w.Handle.ShouldClose() }
-func (w *GlfwWindow2D) Close()               { w.Handle.SetShouldClose(true) }
-func (w *GlfwWindow2D) Size() (int, int)     { return w.Handle.GetSize() }
-func (w *GlfwWindow2D) Position() (int, int) { return w.Handle.GetPos() }
+func (w *Window) MakeContextCurrent()  { w.Handle.MakeContextCurrent() }
+func (w *Window) SwapBuffers()         { w.Handle.SwapBuffers() }
+func (w *Window) ShouldClose() bool    { return w.Handle.ShouldClose() }
+func (w *Window) Close()               { w.Handle.SetShouldClose(true) }
+func (w *Window) Size() (int, int)     { return w.Handle.GetSize() }
+func (w *Window) Position() (int, int) { return w.Handle.GetPos() }
 
-func (w *GlfwWindow3D) MakeContextCurrent()  { w.Handle.MakeContextCurrent() }
-func (w *GlfwWindow3D) SwapBuffers()         { w.Handle.SwapBuffers() }
-func (w *GlfwWindow3D) ShouldClose() bool    { return w.Handle.ShouldClose() }
-func (w *GlfwWindow3D) Close()               { w.Handle.SetShouldClose(true) }
-func (w *GlfwWindow3D) Size() (int, int)     { return w.Handle.GetSize() }
-func (w *GlfwWindow3D) Position() (int, int) { return w.Handle.GetPos() }
-
-func (wm *windowManager) Destroy2D(win *GlfwWindow2D) {
+func (wm *windowManager) Destroy2D(win *Window) {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 	for i, w := range wm.windows2D {
 		if w == win {
 			w.Close()
 			wm.windows2D = append(wm.windows2D[:i], wm.windows2D[i+1:]...)
-			break
-		}
-	}
-}
-
-func (wm *windowManager) Destroy3D(win *GlfwWindow3D) {
-	wm.mu.Lock()
-	defer wm.mu.Unlock()
-	for i, w := range wm.windows3D {
-		if w == win {
-			w.Close()
-			wm.windows3D = append(wm.windows3D[:i], wm.windows3D[i+1:]...)
 			break
 		}
 	}

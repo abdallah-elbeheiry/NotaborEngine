@@ -49,6 +49,7 @@ func main() {
 	shader, _ := win.CreateShader("textured", "notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
 	_ = win.UseShader("textured")
 	shader.SetUniform(notashader.UseTexture, true)
+	shader.SetUniform(notashader.UseCircle, true)
 
 	rect := notagl.CreateTextureQuad(0.5, 0.5)
 	sprite := &notassets.Sprite{
