@@ -113,15 +113,23 @@ func (r *Renderer) Flush(backend *GLBackend) {
 			shader = r.DefaultShader
 		}
 
+		// Bind shader if changed
 		if shader != r.currentShader {
 			shader.Bind()
 			r.currentShader = shader
 		}
 
-		if order.Texture != nil && order.Texture != r.currentTexture {
-			gl.ActiveTexture(gl.TEXTURE0)
-			gl.BindTexture(gl.TEXTURE_2D, order.Texture.ID)
-			r.currentTexture = order.Texture
+		// Update UseTexture uniform per order
+		if order.Texture != nil {
+			shader.SetUniform(UseTexture, true)
+			if order.Texture != r.currentTexture {
+				gl.ActiveTexture(gl.TEXTURE0)
+				gl.BindTexture(gl.TEXTURE_2D, order.Texture.ID)
+				r.currentTexture = order.Texture
+			}
+		} else {
+			shader.SetUniform(UseTexture, false)
+			r.currentTexture = nil // doesn't matter
 		}
 
 		backend.UploadData(order.Vertices)
