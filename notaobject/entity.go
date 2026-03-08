@@ -80,6 +80,11 @@ func (e *Entity) Draw(renderer *Renderer) {
 		return
 	}
 
+	if e.Shader == nil {
+		shader, _ := NewShader("notaobject/shaders/basic.vert", "notaobject/shaders/basic.frag")
+		e.WithShader(shader)
+	}
+
 	model := e.Transform.Matrix()
 
 	if e.Polygon != nil {
