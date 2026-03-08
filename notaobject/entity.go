@@ -1,8 +1,7 @@
-package notassets
+package notaobject
 
 import (
 	"NotaborEngine/notacollision"
-	"NotaborEngine/notagl"
 	"NotaborEngine/notamath"
 )
 
@@ -15,7 +14,7 @@ type Entity struct {
 
 	// Components - can be nil
 	Sprite   *Sprite
-	Polygon  *notagl.Polygon
+	Polygon  *Polygon
 	Collider notacollision.Collider
 }
 
@@ -36,7 +35,7 @@ func (e *Entity) WithSprite(s *Sprite) *Entity {
 	return e
 }
 
-func (e *Entity) WithPolygon(p *notagl.Polygon) *Entity {
+func (e *Entity) WithPolygon(p *Polygon) *Entity {
 	e.Polygon = p
 	return e
 }
@@ -69,7 +68,7 @@ func (e *Entity) updateCollider() {
 	}
 }
 
-func (e *Entity) Draw(renderer *notagl.Renderer) {
+func (e *Entity) Draw(renderer *Renderer) {
 	if !e.Visible || !e.Active {
 		return
 	}
@@ -80,7 +79,7 @@ func (e *Entity) Draw(renderer *notagl.Renderer) {
 		renderer.Submit(e.Polygon, model, nil)
 	}
 	if e.Sprite != nil && e.Sprite.Polygon != nil {
-		renderer.Submit(e.Sprite.Polygon, model, e.Sprite.Texture)
+		renderer.Submit(e.Sprite.Polygon, model, e.Sprite.Material)
 	}
 }
 

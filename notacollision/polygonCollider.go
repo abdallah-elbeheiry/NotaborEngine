@@ -3,23 +3,15 @@
 package notacollision
 
 import (
-	"NotaborEngine/notagl"
 	"NotaborEngine/notamath"
 )
 
 type PolygonCollider struct {
-	// Static local vertices
 	LocalVertices []notamath.Po2
-
-	// Cached world vertices
 	WorldVertices []notamath.Po2
 }
 
-func NewPolygonCollider(polygon *notagl.Polygon) *PolygonCollider {
-	var points []notamath.Po2
-	for _, vert := range polygon.Vertices {
-		points = append(points, vert.Pos)
-	}
+func NewPolygonCollider(points []notamath.Po2) *PolygonCollider {
 	return &PolygonCollider{
 		LocalVertices: points,
 		WorldVertices: make([]notamath.Po2, len(points)),

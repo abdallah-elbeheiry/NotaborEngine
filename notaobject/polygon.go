@@ -1,21 +1,20 @@
-package notagl
+package notaobject
 
 import (
 	"NotaborEngine/notamath"
-	"NotaborEngine/notashader"
 )
 
 type Polygon struct {
 	Vertices []Vertex2D
-	Color    notashader.Color // Default uniform color
+	Color    Color // Default uniform color
 }
 
-func (p *Polygon) SetColor(c notashader.Color) {
+func (p *Polygon) SetColor(c Color) {
 	p.Color = c
 
 	// Clear vertex overrides
 	for i := range p.Vertices {
-		p.Vertices[i].Color = notashader.Color{}
+		p.Vertices[i].Color = Color{}
 	}
 }
 
@@ -44,7 +43,7 @@ func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder) {
 		verts[i] = v
 		verts[i].Pos = model.TransformPo2(v.Pos)
 
-		if v.Color == (notashader.Color{}) {
+		if v.Color == (Color{}) {
 			verts[i].Color = p.Color
 		}
 	}
@@ -54,7 +53,7 @@ func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder) {
 	})
 }
 
-func (p *Polygon) SetVerticalGradient(top, bottom notashader.Color) {
+func (p *Polygon) SetVerticalGradient(top, bottom Color) {
 	if len(p.Vertices) == 0 {
 		return
 	}
@@ -82,7 +81,7 @@ func (p *Polygon) SetVerticalGradient(top, bottom notashader.Color) {
 	}
 }
 
-func (p *Polygon) SetHorizontalGradient(left, right notashader.Color) {
+func (p *Polygon) SetHorizontalGradient(left, right Color) {
 	if len(p.Vertices) == 0 {
 		return
 	}
@@ -121,7 +120,7 @@ func CreateRectangle(w, h float32) *Polygon {
 			{Pos: notamath.Po2{X: +hw, Y: +hh}},
 			{Pos: notamath.Po2{X: -hw, Y: +hh}},
 		},
-		Color: notashader.Color{R: 1, G: 1, B: 1, A: 1},
+		Color: Color{R: 1, G: 1, B: 1, A: 1},
 	}
 
 	return &p
@@ -221,7 +220,17 @@ func CreateTextureQuad(width, height float32) *Polygon {
 				UV:  notamath.Vec2{X: 0, Y: 1},
 			},
 		},
-		Color: notashader.White,
+		Color: White,
 	}
 	return &p
+}
+
+// PolygonPoints extracts the Po2 positions from a Polygon's vertices.
+// Use this when passing a Polygon's shape to notacollision without creating a cyclic import.
+func PolygonPoints(p *Polygon) []notamath.Po2 {
+	points := make([]notamath.Po2, len(p.Vertices))
+	for i, v := range p.Vertices {
+		points[i] = v.Pos
+	}
+	return points
 }

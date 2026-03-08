@@ -1,4 +1,4 @@
-package notashader
+package notaobject
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ const (
 	UseCircle    = "uCircleMask"
 	CircleRadius = "uCircleRadius"
 	CircleEdge   = "uCircleEdge"
-	Texture      = "uTexture"
+	TextureBind  = "uTexture"
 )
 
 // Load shader source with #include support
@@ -58,22 +58,26 @@ func preprocessIncludes(src, baseDir string) (string, error) {
 }
 
 // Create new shader from file paths
-func NewShader(name, vertexPath, fragmentPath string) *Shader {
+func NewShader(name, vertexPath, fragmentPath string) (*Shader, error) {
 	sh := &Shader{
 		Name:         name,
 		VertexPath:   vertexPath,
 		FragmentPath: fragmentPath,
 		Uniforms:     make(map[string]int32),
 	}
-	err := sh.Reload()
-	if err != nil {
-		return nil
+
+	if err := sh.Reload(); err != nil {
+		return nil, err
 	}
-	return sh
+
+	return sh, nil
 }
 
 // Set uniform dynamically
 func (s *Shader) SetUniform(name string, value interface{}) {
+
+	gl.UseProgram(s.Program)
+
 	loc, ok := s.Uniforms[name]
 	if !ok {
 		loc = gl.GetUniformLocation(s.Program, gl.Str(name+"\x00"))
@@ -93,7 +97,7 @@ func (s *Shader) SetUniform(name string, value interface{}) {
 		}
 	case [4]float32:
 		gl.Uniform4f(loc, v[0], v[1], v[2], v[3])
-	case [16]float32: // optional: 4x4 matrix
+	case [16]float32:
 		gl.UniformMatrix4fv(loc, 1, false, &v[0])
 	}
 }
@@ -168,4 +172,12 @@ func CreateProgram(vertexSrc, fragmentSrc string) uint32 {
 	gl.DeleteShader(frag)
 
 	return prog
+}
+
+func (s *Shader) Bind() {
+	gl.UseProgram(s.Program)
+}
+
+func (s *Shader) Unbind() {
+	gl.UseProgram(0)
 }

@@ -1,4 +1,4 @@
-package notassets
+package notaobject
 
 import (
 	"sync"
