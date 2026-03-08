@@ -15,7 +15,7 @@ type Settings struct {
 }
 
 type Engine struct {
-	Windows       []Window
+	Windows       []*Window
 	Settings      *Settings
 	WindowManager *windowManager
 	Input         *InputManager
@@ -109,8 +109,7 @@ func (e *Engine) InitPlatform() error {
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
 	wm := &windowManager{
-		windows2D: []*GlfwWindow2D{},
-		windows3D: []*GlfwWindow3D{},
+		windows2D: []*Window{},
 		nextID:    0,
 	}
 
@@ -119,22 +118,8 @@ func (e *Engine) InitPlatform() error {
 	return nil
 }
 
-func (e *Engine) CreateWindow2D(cfg WindowConfig) (*GlfwWindow2D, error) {
-	win, err := e.WindowManager.Create2D(cfg)
-	if err != nil {
-		return nil, err
-	}
-	win.MakeContextCurrent()
-	if err := gl.Init(); err != nil {
-		return nil, err
-	}
-	win.RunTime.backend.Init()
-	e.Windows = append(e.Windows, win)
-	return win, nil
-}
-
-func (e *Engine) CreateWindow3D(cfg WindowConfig) (*GlfwWindow3D, error) {
-	win, err := e.WindowManager.Create3D(cfg)
+func (e *Engine) CreateWindow2D(cfg WindowConfig) (*Window, error) {
+	win, err := e.WindowManager.Create(cfg)
 	if err != nil {
 		return nil, err
 	}

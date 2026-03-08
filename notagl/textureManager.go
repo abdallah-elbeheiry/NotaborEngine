@@ -16,7 +16,7 @@ func NewTextureManager() *TextureManager {
 	}
 }
 
-// notagl/texture_manager.go - Update Load method
+// Load Update Load method
 func (tm *TextureManager) Load(name, path string, createGL bool) (*Texture, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()

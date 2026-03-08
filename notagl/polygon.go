@@ -33,7 +33,7 @@ func (p *Polygon) Fixate() {
 	}
 }
 
-func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder2D) {
+func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder) {
 	if len(p.Vertices) < 3 {
 		return
 	}
@@ -49,7 +49,7 @@ func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder2D) {
 		}
 	}
 
-	*orders = append(*orders, DrawOrder2D{
+	*orders = append(*orders, DrawOrder{
 		Vertices: verts,
 	})
 }

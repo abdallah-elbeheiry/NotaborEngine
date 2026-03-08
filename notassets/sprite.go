@@ -7,9 +7,10 @@ import (
 )
 
 type Sprite struct {
-	Texture *notagl.Texture
-	Name    string
-	Polygon *notagl.Polygon // reusable quad
+	Texture  *notagl.Texture
+	Name     string
+	Polygon  *notagl.Polygon // reusable quad
+	Material *Material
 }
 
 type SpriteManager struct {
