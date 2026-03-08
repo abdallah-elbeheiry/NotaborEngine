@@ -37,7 +37,6 @@ type Window struct {
 	Handle  *glfw.Window
 	Config  WindowConfig
 	RunTime windowRunTime
-	Shaders map[string]*notaobject.Shader
 }
 
 func (w *Window) GetConfig() *WindowConfig       { return &w.Config }
