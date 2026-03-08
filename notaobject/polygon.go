@@ -24,7 +24,7 @@ func (p *Polygon) Fixate() {
 		return
 	}
 
-	center := polygonCentroid(p.Vertices)
+	center := PolygonCentroid(p.Vertices)
 
 	for i := range p.Vertices {
 		p.Vertices[i].Pos.X -= center.X
@@ -39,9 +39,37 @@ func (p *Polygon) AddToOrders(model notamath.Mat3, orders *[]DrawOrder) {
 
 	verts := make([]Vertex2D, len(p.Vertices))
 
+	// Compute bounds for normalizing LocalPos to [-0.5, 0.5]
+	minX, minY := p.Vertices[0].Pos.X, p.Vertices[0].Pos.Y
+	maxX, maxY := minX, minY
+	for _, v := range p.Vertices {
+		if v.Pos.X < minX {
+			minX = v.Pos.X
+		}
+		if v.Pos.Y < minY {
+			minY = v.Pos.Y
+		}
+		if v.Pos.X > maxX {
+			maxX = v.Pos.X
+		}
+		if v.Pos.Y > maxY {
+			maxY = v.Pos.Y
+		}
+	}
+	rangeX := maxX - minX
+	rangeY := maxY - minY
+
 	for i, v := range p.Vertices {
 		verts[i] = v
 		verts[i].Pos = model.TransformPo2(v.Pos)
+
+		// Normalize to [-0.5, 0.5] so uCircleRadius=0.5 always fills the quad
+		if rangeX > 0 {
+			verts[i].LocalPos.X = (v.Pos.X-minX)/rangeX - 0.5
+		}
+		if rangeY > 0 {
+			verts[i].LocalPos.Y = (v.Pos.Y-minY)/rangeY - 0.5
+		}
 
 		if v.Color == (Color{}) {
 			verts[i].Color = p.Color
@@ -171,7 +199,7 @@ func IsEar(prev, curr, next notamath.Po2, poly []notamath.Po2) bool {
 	return true
 }
 
-func polygonCentroid(poly []Vertex2D) notamath.Po2 {
+func PolygonCentroid(poly []Vertex2D) notamath.Po2 {
 	var cx, cy, area float32
 
 	n := len(poly)

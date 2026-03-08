@@ -8,28 +8,31 @@ import (
 )
 
 type Vertex2D struct {
-	Pos   notamath.Po2
-	Color Color
-	UV    notamath.Vec2
+	Pos      notamath.Po2
+	Color    Color
+	UV       notamath.Vec2
+	LocalPos notamath.Po2
 }
 
 type DrawOrder struct {
 	Vertices []Vertex2D
-	Material *Material
+	Texture  *Texture
+	Shader   *Shader
 }
 type Renderer struct {
 	Orders []DrawOrder
 
 	currentShader  *Shader
 	currentTexture *Texture
+
+	DefaultShader *Shader
 }
 
-func (r *Renderer) Submit(p *Polygon, model notamath.Mat3, mat *Material) {
+func (r *Renderer) Submit(p *Polygon, model notamath.Mat3, tex *Texture, shader *Shader) {
 	var temp []DrawOrder
 	p.AddToOrders(model, &temp)
 
 	for _, order := range temp {
-
 		tris := Triangulate2D(order.Vertices)
 		if len(tris) == 0 {
 			continue
@@ -37,7 +40,8 @@ func (r *Renderer) Submit(p *Polygon, model notamath.Mat3, mat *Material) {
 
 		r.Orders = append(r.Orders, DrawOrder{
 			Vertices: tris,
-			Material: mat,
+			Texture:  tex,
+			Shader:   shader,
 		})
 	}
 }
@@ -79,6 +83,12 @@ func (b *GLBackend) Init() {
 	gl.VertexArrayAttribFormat(b.vao, 2, 2, gl.FLOAT, false, uvOffset)
 	gl.VertexArrayAttribBinding(b.vao, 2, 0)
 	gl.EnableVertexArrayAttrib(b.vao, 2)
+
+	// LocalPos Attribute (Location 3)
+	localOffset := uint32(unsafe.Sizeof(notamath.Po2{}) + unsafe.Sizeof(Color{}) + unsafe.Sizeof(notamath.Vec2{}))
+	gl.VertexArrayAttribFormat(b.vao, 3, 2, gl.FLOAT, false, localOffset)
+	gl.VertexArrayAttribBinding(b.vao, 3, 0)
+	gl.EnableVertexArrayAttrib(b.vao, 3)
 }
 
 func (b *GLBackend) BindVao() {
@@ -91,7 +101,6 @@ func (b *GLBackend) UploadData(vertices interface{}) {
 }
 
 func (r *Renderer) Flush(backend *GLBackend) {
-
 	if len(r.Orders) == 0 {
 		return
 	}
@@ -99,27 +108,23 @@ func (r *Renderer) Flush(backend *GLBackend) {
 	backend.BindVao()
 
 	for _, order := range r.Orders {
+		shader := order.Shader
+		if shader == nil {
+			shader = r.DefaultShader
+		}
 
-		mat := order.Material
+		if shader != r.currentShader {
+			shader.Bind()
+			r.currentShader = shader
+		}
 
-		if mat != nil {
-
-			// bind shader if changed
-			if mat.Shader != r.currentShader {
-				mat.Shader.Bind()
-				r.currentShader = mat.Shader
-			}
-
-			// bind texture if changed
-			if mat.Texture != r.currentTexture && mat.Texture != nil {
-				gl.ActiveTexture(gl.TEXTURE0)
-				gl.BindTexture(gl.TEXTURE_2D, mat.Texture.ID)
-				r.currentTexture = mat.Texture
-			}
+		if order.Texture != nil && order.Texture != r.currentTexture {
+			gl.ActiveTexture(gl.TEXTURE0)
+			gl.BindTexture(gl.TEXTURE_2D, order.Texture.ID)
+			r.currentTexture = order.Texture
 		}
 
 		backend.UploadData(order.Vertices)
-
 		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(order.Vertices)))
 	}
 

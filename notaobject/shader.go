@@ -10,7 +10,6 @@ import (
 )
 
 type Shader struct {
-	Name         string
 	VertexPath   string
 	FragmentPath string
 	Program      uint32
@@ -58,9 +57,8 @@ func preprocessIncludes(src, baseDir string) (string, error) {
 }
 
 // Create new shader from file paths
-func NewShader(name, vertexPath, fragmentPath string) (*Shader, error) {
+func NewShader(vertexPath, fragmentPath string) (*Shader, error) {
 	sh := &Shader{
-		Name:         name,
 		VertexPath:   vertexPath,
 		FragmentPath: fragmentPath,
 		Uniforms:     make(map[string]int32),
@@ -100,6 +98,11 @@ func (s *Shader) SetUniform(name string, value interface{}) {
 	case [16]float32:
 		gl.UniformMatrix4fv(loc, 1, false, &v[0])
 	}
+}
+
+func (s *Shader) Clone() *Shader {
+	shader, _ := NewShader(s.VertexPath, s.FragmentPath)
+	return shader
 }
 
 // Compile & reload shader program
