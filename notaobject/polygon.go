@@ -143,32 +143,26 @@ func CreateRectangle(w, h float32) *Polygon {
 
 	p := Polygon{
 		Vertices: []Vertex2D{
-			{Pos: notamath.Po2{X: -hw, Y: -hh}},
-			{Pos: notamath.Po2{X: +hw, Y: -hh}},
-			{Pos: notamath.Po2{X: +hw, Y: +hh}},
-			{Pos: notamath.Po2{X: -hw, Y: +hh}},
+			{
+				Pos: notamath.Po2{X: -hw, Y: -hh},
+				UV:  notamath.Vec2{X: 0, Y: 0},
+			},
+			{
+				Pos: notamath.Po2{X: +hw, Y: -hh},
+				UV:  notamath.Vec2{X: 1, Y: 0},
+			},
+			{
+				Pos: notamath.Po2{X: +hw, Y: +hh},
+				UV:  notamath.Vec2{X: 1, Y: 1},
+			},
+			{
+				Pos: notamath.Po2{X: -hw, Y: +hh},
+				UV:  notamath.Vec2{X: 0, Y: 1},
+			},
 		},
-		Color: Color{R: 1, G: 1, B: 1, A: 1},
+		Color: White,
 	}
-
 	return &p
-}
-
-// CreateCircle creates a uniform quad
-// to actually make this into a circle you will use to use the default shader and set UseCircle to true and set radius/edge
-func CreateCircle(radius float32) *Polygon {
-	size := radius * 2
-	return CreateRectangle(size, size)
-}
-
-func IsCCW(poly []notamath.Po2) bool {
-	var area float32
-	for i := 0; i < len(poly); i++ {
-		a := poly[i]
-		b := poly[(i+1)%len(poly)]
-		area += (b.X - a.X) * (b.Y + a.Y)
-	}
-	return area < 0
 }
 
 func PointInTriangle(p, a, b, c notamath.Po2) bool {
@@ -180,23 +174,6 @@ func PointInTriangle(p, a, b, c notamath.Po2) bool {
 	hasPos := (o1 > 0) || (o2 > 0) || (o3 > 0)
 
 	return !(hasNeg && hasPos)
-}
-
-func IsEar(prev, curr, next notamath.Po2, poly []notamath.Po2) bool {
-	// Must be convex (CCW polygon)
-	if notamath.Orient(prev, curr, next) <= 0 {
-		return false
-	}
-
-	for _, p := range poly {
-		if p == prev || p == curr || p == next {
-			continue
-		}
-		if PointInTriangle(p, prev, curr, next) {
-			return false
-		}
-	}
-	return true
 }
 
 func PolygonCentroid(poly []Vertex2D) notamath.Po2 {
@@ -225,37 +202,7 @@ func PolygonCentroid(poly []Vertex2D) notamath.Po2 {
 	}
 }
 
-func CreateTextureQuad(width, height float32) *Polygon {
-	hw := width / 2
-	hh := height / 2
-
-	p := Polygon{
-		Vertices: []Vertex2D{
-			{
-				Pos: notamath.Po2{X: -hw, Y: -hh},
-				UV:  notamath.Vec2{X: 0, Y: 0},
-			},
-			{
-				Pos: notamath.Po2{X: +hw, Y: -hh},
-				UV:  notamath.Vec2{X: 1, Y: 0},
-			},
-			{
-				Pos: notamath.Po2{X: +hw, Y: +hh},
-				UV:  notamath.Vec2{X: 1, Y: 1},
-			},
-			{
-				Pos: notamath.Po2{X: -hw, Y: +hh},
-				UV:  notamath.Vec2{X: 0, Y: 1},
-			},
-		},
-		Color: White,
-	}
-	return &p
-}
-
-// PolygonPoints extracts the Po2 positions from a Polygon's vertices.
-// Use this when passing a Polygon's shape to notacollision without creating a cyclic import.
-func PolygonPoints(p *Polygon) []notamath.Po2 {
+func (p *Polygon) Points() []notamath.Po2 {
 	points := make([]notamath.Po2, len(p.Vertices))
 	for i, v := range p.Vertices {
 		points[i] = v.Pos
