@@ -16,6 +16,8 @@ type Entity struct {
 	Sprite   *Sprite
 	Polygon  *Polygon
 	Collider notacollision.Collider
+
+	Shader *Shader
 }
 
 func NewEntity(id, name string) *Entity {
@@ -42,6 +44,11 @@ func (e *Entity) WithPolygon(p *Polygon) *Entity {
 
 func (e *Entity) WithCollider(c notacollision.Collider) *Entity {
 	e.Collider = c
+	return e
+}
+
+func (e *Entity) WithShader(s *Shader) *Entity {
+	e.Shader = s
 	return e
 }
 
@@ -76,10 +83,11 @@ func (e *Entity) Draw(renderer *Renderer) {
 	model := e.Transform.Matrix()
 
 	if e.Polygon != nil {
-		renderer.Submit(e.Polygon, model, nil)
+		renderer.Submit(e.Polygon, model, nil, e.Shader)
 	}
+
 	if e.Sprite != nil && e.Sprite.Polygon != nil {
-		renderer.Submit(e.Sprite.Polygon, model, e.Sprite.Material)
+		renderer.Submit(e.Sprite.Polygon, model, e.Sprite.Texture, e.Shader)
 	}
 }
 

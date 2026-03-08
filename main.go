@@ -44,11 +44,8 @@ func main() {
 		panic(err)
 	}
 
-	shader, _ := win.CreateShader("textured", "notaobject/shaders/basic.vert", "notaobject/shaders/basic.frag")
-	_ = win.UseShader("textured")
+	shader, _ := notaobject.NewShader("notaobject/shaders/basic.vert", "notaobject/shaders/basic.frag")
 	shader.SetUniform(notaobject.UseTexture, true)
-	shader.SetUniform(notaobject.UseCircle, true)
-
 	rect := notaobject.CreateTextureQuad(0.5, 0.5)
 	sprite := &notaobject.Sprite{
 		Texture: texture,
@@ -56,21 +53,25 @@ func main() {
 		Polygon: rect,
 	}
 
+	circle := shader.Clone()
+	circle.SetUniform(notaobject.UseCircle, true)
+	circle.SetUniform(notaobject.UseTexture, true)
+	circle.SetUniform(notaobject.CircleRadius, 0.1)
 	entity := notaobject.NewEntity("quad", "Test Quad").
 		WithSprite(sprite).
-		WithCollider(notacollision.NewPolygonCollider(notaobject.PolygonPoints(rect)))
+		WithCollider(notacollision.NewCircleCollider(notaobject.PolygonCentroid(rect.Vertices), 0.25)).WithShader(circle)
 
 	rect1 := notaobject.CreateRectangle(0.2, 2)
 	entity1 := notaobject.NewEntity("wall", "Test Wall").
 		WithPolygon(rect1).
-		WithCollider(notacollision.NewPolygonCollider(notaobject.PolygonPoints(rect1)))
+		WithCollider(notacollision.NewPolygonCollider(notaobject.PolygonPoints(rect1))).WithShader(shader)
 	rect1.SetColor(notaobject.Green)
 	entity1.Move(notamath.Vec2{X: 1, Y: 0})
 
 	rect2 := notaobject.CreateRectangle(0.2, 2)
 	entity2 := notaobject.NewEntity("wall2", "Test Wall").
 		WithPolygon(rect2).
-		WithCollider(notacollision.NewPolygonCollider(notaobject.PolygonPoints(rect2)))
+		WithCollider(notacollision.NewPolygonCollider(notaobject.PolygonPoints(rect2))).WithShader(shader)
 	rect2.SetColor(notaobject.Red)
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 

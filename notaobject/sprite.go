@@ -6,10 +6,9 @@ import (
 )
 
 type Sprite struct {
-	Texture  *Texture
-	Name     string
-	Polygon  *Polygon // reusable quad
-	Material *Material
+	Name    string
+	Polygon *Polygon
+	Texture *Texture
 }
 
 type SpriteManager struct {
@@ -35,8 +34,8 @@ func (sm *SpriteManager) Create(name string, texture *Texture) (*Sprite, error) 
 	}
 
 	sprite := &Sprite{
-		Texture: texture,
 		Name:    name,
+		Texture: texture,
 	}
 
 	sm.sprites[name] = sprite

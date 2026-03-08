@@ -49,7 +49,7 @@ func (w *Window) CreateShader(name, vertexPath, fragmentPath string) (*notaobjec
 	}
 
 	w.MakeContextCurrent()
-	shader, err := notaobject.NewShader(name, vertexPath, fragmentPath)
+	shader, err := notaobject.NewShader(vertexPath, fragmentPath)
 	if err != nil {
 		return nil, err
 	}
