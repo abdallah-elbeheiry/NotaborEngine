@@ -36,7 +36,7 @@ func main() {
 		RenderLoop: renderLoop,
 		LogicLoops: []*notacore.FixedHzLoop{logicLoop},
 	}
-	win, err := engine.CreateWindow2D(cfg)
+	win, err := engine.CreateWindow(cfg)
 	if err != nil {
 		panic(err)
 	}

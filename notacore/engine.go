@@ -118,7 +118,7 @@ func (e *Engine) InitPlatform() error {
 	return nil
 }
 
-func (e *Engine) CreateWindow2D(cfg WindowConfig) (*Window, error) {
+func (e *Engine) CreateWindow(cfg WindowConfig) (*Window, error) {
 	win, err := e.WindowManager.Create(cfg)
 	if err != nil {
 		return nil, err

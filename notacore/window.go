@@ -21,13 +21,13 @@ type WindowConfig struct {
 	RenderLoop *RenderLoop
 }
 
-type windowBaseRuntime struct {
+type WindowBaseRuntime struct {
 	lastRender time.Time
 	targetDt   time.Duration
 }
 
 type windowRunTime struct {
-	windowBaseRuntime
+	WindowBaseRuntime
 	backend    *notagl.GLBackend
 	Renderer   *notagl.Renderer
 	TextureMgr *notagl.TextureManager
@@ -42,7 +42,7 @@ type Window struct {
 }
 
 func (w *Window) GetConfig() *WindowConfig       { return &w.Config }
-func (w *Window) GetRuntime() *windowBaseRuntime { return &w.RunTime.windowBaseRuntime }
+func (w *Window) GetRuntime() *WindowBaseRuntime { return &w.RunTime.WindowBaseRuntime }
 func (w *Window) RunRenderer() {
 	w.RunTime.Renderer.Orders = w.RunTime.Renderer.Orders[:0]
 	w.Config.RenderLoop.Render()
@@ -99,7 +99,7 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 		Handle: handle,
 		Config: cfg,
 		RunTime: windowRunTime{
-			windowBaseRuntime: windowBaseRuntime{
+			WindowBaseRuntime: WindowBaseRuntime{
 				lastRender: time.Now(),
 				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz),
 			},
