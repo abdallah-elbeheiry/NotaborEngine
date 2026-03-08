@@ -486,32 +486,23 @@ func connectedGamepads() []*glfw.GamepadState {
 	}
 	return gamepads
 }
-
 func (im *InputManager) CaptureInputs(windows []*Window) {
-	if im.active == nil {
-		im.active = make(map[Input]bool)
-	}
-
 	im.mu.Lock()
 	defer im.mu.Unlock()
 
-	// reset active map
+	gamepads := connectedGamepads()
+
 	for input := range im.inputToSignal {
-		im.active[input] = false
-	}
+		im.active[input] = false // Reset
 
-	for _, win := range windows {
-		if win == nil || win.ShouldClose() {
-			continue
-		}
-
-		gamepads := connectedGamepads()
-
-		for input := range im.inputToSignal {
-			if im.active[input] {
+		for _, win := range windows {
+			if win == nil || win.ShouldClose() {
 				continue
 			}
-			im.active[input] = isInputActive(win, input, gamepads)
+			if isInputActive(win, input, gamepads) {
+				im.active[input] = true
+				break
+			}
 		}
 	}
 }
@@ -532,4 +523,26 @@ func NewInputManager() *InputManager {
 		signalToAction: make(map[*InputSignal][]*Action),
 		active:         make(map[Input]bool),
 	}
+}
+
+func (im *InputManager) Tick() {
+	im.UpdateSignals()
+
+	im.mu.RLock()
+	defer im.mu.RUnlock()
+
+	for _, actions := range im.signalToAction {
+		for _, action := range actions {
+			action.RunWhenShould()
+		}
+	}
+}
+
+func (im *InputManager) BindAction(sig *InputSignal, action *Action) {
+	im.mu.Lock()
+	defer im.mu.Unlock()
+
+	action.BindSignal(sig)
+
+	im.signalToAction[sig] = append(im.signalToAction[sig], action)
 }

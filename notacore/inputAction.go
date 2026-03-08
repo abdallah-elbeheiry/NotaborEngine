@@ -30,7 +30,7 @@ type Action struct {
 	runnables []Runnable
 }
 
-func (a *Action) ShouldRun() bool {
+func (a *Action) RunWhenShould() bool {
 
 	a.shouldToggle()
 	a.updateHoldInformation()
@@ -57,6 +57,10 @@ func (a *Action) ShouldRun() bool {
 
 	if result {
 		a.lastRun = time.Now()
+		err := a.Run()
+		if err != nil {
+			return false
+		}
 	}
 	return result
 }

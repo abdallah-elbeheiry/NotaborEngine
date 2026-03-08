@@ -20,7 +20,6 @@ func main() {
 
 	renderLoop := &notacore.RenderLoop{MaxHz: 60}
 	logicLoop := &notacore.FixedHzLoop{Hz: 1000}
-
 	logicLoop.EnableMonitor(time.Second)
 
 	cfg := notacore.WindowConfig{
@@ -34,14 +33,30 @@ func main() {
 		RenderLoop: renderLoop,
 		LogicLoops: []*notacore.FixedHzLoop{logicLoop},
 	}
+
 	win, err := engine.CreateWindow(cfg)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
+	engine.SetInputFrequency(1000) // 1000 Hz input polling
+	inputManager := engine.InputManager
+
+	// Create InputSignals for WASD
+	keyW := &notacore.InputSignal{}
+	keyA := &notacore.InputSignal{}
+	keyS := &notacore.InputSignal{}
+	keyD := &notacore.InputSignal{}
+
+	inputManager.BindInput(notacore.KeyW, keyW)
+	inputManager.BindInput(notacore.KeyA, keyA)
+	inputManager.BindInput(notacore.KeyS, keyS)
+	inputManager.BindInput(notacore.KeyD, keyD)
+
+	// Load texture
 	texture, err := win.LoadTexture("test", "resources/hahaha.jpg")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	rect := notaobject.CreateRectangle(0.5, 0.5)
@@ -50,20 +65,22 @@ func main() {
 		Name:    "quadSprite",
 		Polygon: rect,
 	}
-
 	entity := notaobject.NewEntity("quad", "Test Quad").
 		WithSprite(sprite).
 		WithCollider(notacollision.NewPolygonCollider(rect.Points()))
 
+	// Add static walls
 	rect1 := notaobject.CreateRectangle(0.2, 2)
 	sprite1 := &notaobject.Sprite{
 		Texture: texture,
 		Name:    "quadSprite",
 		Polygon: rect1,
 	}
+
 	entity1 := notaobject.NewEntity("wall", "Test Wall").
 		WithPolygon(rect1).
-		WithCollider(notacollision.NewPolygonCollider(rect1.Points())).WithSprite(sprite1)
+		WithCollider(notacollision.NewPolygonCollider(rect1.Points())).
+		WithSprite(sprite1)
 	rect1.SetColor(notaobject.Green)
 	entity1.Move(notamath.Vec2{X: 1, Y: 0})
 
@@ -74,30 +91,37 @@ func main() {
 	rect2.SetColor(notaobject.Red)
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
-	renderLoop.Add(func() error {
-		entity.Draw(win.RunTime.Renderer)
-		return nil
-	})
-	renderLoop.Add(func() error {
-		entity1.Draw(win.RunTime.Renderer)
-		return nil
-	})
-	renderLoop.Add(func() error {
-		entity2.Draw(win.RunTime.Renderer)
-		return nil
-	})
+	// Render loop
+	renderLoop.Add(func() error { entity.Draw(win.RunTime.Renderer); return nil })
+	renderLoop.Add(func() error { entity1.Draw(win.RunTime.Renderer); return nil })
+	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })
 
-	direction := 1.0
+	speed := float32(0.005)
 
+	// Logic loop: movement with WASD
 	logicLoop.Add(func() error {
-		entity.Rotate(float32(direction * 0.01))
-		entity.Move(notamath.Vec2{X: 0.001}.Mul(float32(direction)))
-		return nil
-	})
-	logicLoop.Add(func() error {
-		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
-			direction *= -1.0
+		move := notamath.Vec2{X: 0, Y: 0}
+		if keyW.Down() {
+			move.Y += speed
 		}
+		if keyS.Down() {
+			move.Y -= speed
+		}
+		if keyA.Down() {
+			move.X -= speed
+		}
+		if keyD.Down() {
+			move.X += speed
+		}
+
+		entity.Move(move)
+
+		// Collision check
+		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
+			// Undo move if collision detected
+			entity.Move(move.Mul(-1))
+		}
+
 		return nil
 	})
 

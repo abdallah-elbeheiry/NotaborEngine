@@ -1,6 +1,7 @@
 package notacore
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,25 +19,22 @@ type Engine struct {
 	Windows       []*Window
 	Settings      *Settings
 	WindowManager *windowManager
-	Input         *InputManager
+	InputManager  *InputManager
 
-	running bool
+	inputLoop *FixedHzLoop
+	running   bool
 }
 
 func (e *Engine) Run() error {
 	e.running = true
 
+	if e.inputLoop != nil {
+		e.inputLoop.Start()
+	}
 	// Start all logic loops
 	for _, w := range e.Windows {
 		cfg := w.GetConfig()
 		for _, loop := range cfg.LogicLoops {
-			if e.Input != nil {
-				update := func() error {
-					e.Input.UpdateSignals()
-					return nil
-				}
-				loop.activeRunnables = append([]Runnable{update}, loop.activeRunnables...)
-			}
 			loop.Start()
 		}
 		w.GetRuntime().lastRender = time.Now()
@@ -45,8 +43,8 @@ func (e *Engine) Run() error {
 	for e.running && !e.AllWindowsClosed() {
 		e.WindowManager.PollEvents()
 
-		if e.Input != nil {
-			e.Input.CaptureInputs(e.Windows)
+		if e.InputManager != nil {
+			e.InputManager.CaptureInputs(e.Windows)
 		}
 
 		now := time.Now()
@@ -76,6 +74,17 @@ func (e *Engine) Run() error {
 		}
 	}
 	return nil
+}
+
+func (e *Engine) SetInputFrequency(Hz float32) {
+	e.inputLoop = &FixedHzLoop{Hz: Hz}
+	e.inputLoop.Add(func() error {
+		if e.InputManager == nil {
+			return errors.New("InputManager is not initialized, initialize it first")
+		}
+		e.InputManager.Tick()
+		return nil
+	})
 }
 
 func (e *Engine) AllWindowsClosed() bool {
@@ -114,7 +123,7 @@ func (e *Engine) InitPlatform() error {
 	}
 
 	e.WindowManager = wm
-	e.Input = &InputManager{}
+	e.InputManager = &InputManager{}
 	return nil
 }
 
