@@ -1,4 +1,4 @@
-package notagl
+package notaobject
 
 import (
 	"fmt"

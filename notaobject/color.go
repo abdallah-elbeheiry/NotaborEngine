@@ -1,4 +1,4 @@
-package notashader
+package notaobject
 
 import (
 	"fmt"

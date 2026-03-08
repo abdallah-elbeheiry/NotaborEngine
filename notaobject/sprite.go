@@ -1,25 +1,24 @@
-package notassets
+package notaobject
 
 import (
-	"NotaborEngine/notagl"
 	"fmt"
 	"sync"
 )
 
 type Sprite struct {
-	Texture  *notagl.Texture
+	Texture  *Texture
 	Name     string
-	Polygon  *notagl.Polygon // reusable quad
+	Polygon  *Polygon // reusable quad
 	Material *Material
 }
 
 type SpriteManager struct {
 	sprites  map[string]*Sprite
-	textures *notagl.TextureManager
+	textures *TextureManager
 	mu       sync.RWMutex
 }
 
-func NewSpriteManager(textureManager *notagl.TextureManager) *SpriteManager {
+func NewSpriteManager(textureManager *TextureManager) *SpriteManager {
 	return &SpriteManager{
 		sprites:  make(map[string]*Sprite),
 		textures: textureManager,
@@ -27,7 +26,7 @@ func NewSpriteManager(textureManager *notagl.TextureManager) *SpriteManager {
 }
 
 // Create creates a new sprite from a loaded texture
-func (sm *SpriteManager) Create(name string, texture *notagl.Texture) (*Sprite, error) {
+func (sm *SpriteManager) Create(name string, texture *Texture) (*Sprite, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 

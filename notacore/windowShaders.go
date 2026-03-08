@@ -1,7 +1,7 @@
 package notacore
 
 import (
-	"NotaborEngine/notashader"
+	"NotaborEngine/notaobject"
 	"errors"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
@@ -31,7 +31,7 @@ func (w *Window) UpdateShader(name string) error {
 	return nil
 }
 
-func (w *Window) GetShader(name string) (*notashader.Shader, error) {
+func (w *Window) GetShader(name string) (*notaobject.Shader, error) {
 	shader, ok := w.Shaders[name]
 	if !ok {
 		return nil, errors.New("shader with name " + name + " not found")
@@ -39,9 +39,9 @@ func (w *Window) GetShader(name string) (*notashader.Shader, error) {
 	return shader, nil
 }
 
-func (w *Window) CreateShader(name, vertexPath, fragmentPath string) (*notashader.Shader, error) {
+func (w *Window) CreateShader(name, vertexPath, fragmentPath string) (*notaobject.Shader, error) {
 	if w.Shaders == nil {
-		w.Shaders = make(map[string]*notashader.Shader)
+		w.Shaders = make(map[string]*notaobject.Shader)
 	}
 
 	if _, found := w.Shaders[name]; found {
@@ -49,7 +49,10 @@ func (w *Window) CreateShader(name, vertexPath, fragmentPath string) (*notashade
 	}
 
 	w.MakeContextCurrent()
-	shader := notashader.NewShader(name, vertexPath, fragmentPath)
+	shader, err := notaobject.NewShader(name, vertexPath, fragmentPath)
+	if err != nil {
+		return nil, err
+	}
 	w.Shaders[name] = shader
 	return shader, nil
 }
