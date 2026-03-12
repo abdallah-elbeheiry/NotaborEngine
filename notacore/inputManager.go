@@ -542,7 +542,10 @@ func (im *InputManager) BindAction(sig *InputSignal, action *Action) {
 	im.mu.Lock()
 	defer im.mu.Unlock()
 
-	action.BindSignal(sig)
+	if im.signalToAction == nil {
+		im.signalToAction = make(map[*InputSignal][]*Action)
+	}
 
+	action.BindSignal(sig)
 	im.signalToAction[sig] = append(im.signalToAction[sig], action)
 }
