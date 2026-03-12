@@ -19,7 +19,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := &notacore.RenderLoop{MaxHz: 60}
-	logicLoop := &notacore.FixedHzLoop{Hz: 1000}
+	logicLoop := &notacore.FixedHzLoop{Hz: 120}
 	logicLoop.EnableMonitor(time.Second)
 
 	cfg := notacore.WindowConfig{
@@ -39,26 +39,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	engine.SetInputFrequency(1000) // 1000 Hz input polling
-	inputManager := engine.InputManager
+	engine.SetInputFrequency(250)
+	im := engine.InputManager
 
-	// Create InputSignals for WASD
-	keyW := &notacore.InputSignal{}
-	keyA := &notacore.InputSignal{}
-	keyS := &notacore.InputSignal{}
-	keyD := &notacore.InputSignal{}
-
-	inputManager.BindInput(notacore.KeyW, keyW)
-	inputManager.BindInput(notacore.KeyA, keyA)
-	inputManager.BindInput(notacore.KeyS, keyS)
-	inputManager.BindInput(notacore.KeyD, keyD)
-
-	// Load texture
+	// Load texture and create entity
 	texture, err := win.LoadTexture("test", "resources/hahaha.jpg")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	rect := notaobject.CreateRectangle(0.5, 0.5)
 	sprite := &notaobject.Sprite{
 		Texture: texture,
@@ -69,14 +57,9 @@ func main() {
 		WithSprite(sprite).
 		WithCollider(notacollision.NewPolygonCollider(rect.Points()))
 
-	// Add static walls
+	// Static walls
 	rect1 := notaobject.CreateRectangle(0.2, 2)
-	sprite1 := &notaobject.Sprite{
-		Texture: texture,
-		Name:    "quadSprite",
-		Polygon: rect1,
-	}
-
+	sprite1 := &notaobject.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
 	entity1 := notaobject.NewEntity("wall", "Test Wall").
 		WithPolygon(rect1).
 		WithCollider(notacollision.NewPolygonCollider(rect1.Points())).
@@ -96,35 +79,49 @@ func main() {
 	renderLoop.Add(func() error { entity1.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })
 
-	speed := float32(0.005)
+	// Movement speed
+	speed := float32(0.02)
 
-	// Logic loop: movement with WASD
+	// input
+	sigW := &notacore.InputSignal{}
+	sigA := &notacore.InputSignal{}
+	sigS := &notacore.InputSignal{}
+	sigD := &notacore.InputSignal{}
+
+	im.BindInput(notacore.KeyW, sigW)
+	im.BindInput(notacore.KeyA, sigA)
+	im.BindInput(notacore.KeyS, sigS)
+	im.BindInput(notacore.KeyD, sigD)
+
+	// Actions
+	actW := &notacore.Action{Behavior: notacore.RunWhileHeld}
+	actS := &notacore.Action{Behavior: notacore.RunWhileHeld}
+	actA := &notacore.Action{Behavior: notacore.RunWhileHeld}
+	actD := &notacore.Action{Behavior: notacore.RunWhileHeld}
+
+	// Bind Actions to Signals
+	im.BindAction(sigW, actW)
+	im.BindAction(sigA, actA)
+	im.BindAction(sigS, actS)
+	im.BindAction(sigD, actD)
+
+	var deltaMove notamath.Vec2
+
+	actW.AddRunnable(func() error { deltaMove.Y += speed; return nil })
+	actS.AddRunnable(func() error { deltaMove.Y -= speed; return nil })
+	actA.AddRunnable(func() error { deltaMove.X -= speed; return nil })
+	actD.AddRunnable(func() error { deltaMove.X += speed; return nil })
+
 	logicLoop.Add(func() error {
-		move := notamath.Vec2{X: 0, Y: 0}
-		if keyW.Down() {
-			move.Y += speed
-		}
-		if keyS.Down() {
-			move.Y -= speed
-		}
-		if keyA.Down() {
-			move.X -= speed
-		}
-		if keyD.Down() {
-			move.X += speed
-		}
-
-		entity.Move(move)
-
-		// Collision check
+		entity.Move(deltaMove)
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
-			// Undo move if collision detected
-			entity.Move(move.Mul(-1))
+			entity.Move(deltaMove.Neg()) // undo
 		}
-
+		deltaMove = notamath.Vec2{} // reset
 		return nil
 	})
 
+	// Run engine
 	if err := engine.Run(); err != nil {
 		log.Fatal("Engine run failed:", err)
 	}
