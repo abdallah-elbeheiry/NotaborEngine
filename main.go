@@ -19,7 +19,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := &notacore.RenderLoop{MaxHz: 60}
-	logicLoop := &notacore.FixedHzLoop{Hz: 120}
+	logicLoop := &notacore.FixedHzLoop{Hz: 500000}
 	logicLoop.EnableMonitor(time.Second)
 
 	cfg := notacore.WindowConfig{
@@ -39,7 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	engine.SetInputFrequency(250)
+	engine.SetInputFrequency(3000)
 	im := engine.InputManager
 
 	// Load texture and create entity
@@ -80,7 +80,7 @@ func main() {
 	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })
 
 	// Movement speed
-	speed := float32(0.02)
+	speed := float32(0.001)
 
 	// input
 	sigW := &notacore.InputSignal{}
@@ -118,6 +118,14 @@ func main() {
 			entity.Move(deltaMove.Neg()) // undo
 		}
 		deltaMove = notamath.Vec2{} // reset
+		return nil
+	})
+	val := 1.0
+	logicLoop.Add(func() error {
+		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
+		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
+			val *= -1
+		}
 		return nil
 	})
 
