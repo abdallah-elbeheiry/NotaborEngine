@@ -396,5 +396,5 @@ func (a *UInt64) Toggle(mask uint64) uint64 {
 }
 
 func (a *UInt64) String() string {
-	return strconv.FormatUint(uint64(a.Get()), 10)
+	return strconv.FormatUint(a.Get(), 10)
 }
