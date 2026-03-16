@@ -18,8 +18,8 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	renderLoop := &notacore.RenderLoop{MaxHz: 60}
-	logicLoop := &notacore.FixedHzLoop{Hz: 500000}
+	renderLoop := notacore.CreateRenderLoop(60)
+	logicLoop := notacore.CreateFixedHzLoop(200000)
 	logicLoop.EnableMonitor(time.Second)
 
 	cfg := notacore.WindowConfig{

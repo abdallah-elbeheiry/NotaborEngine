@@ -1,54 +1,78 @@
 package notaobject
 
 import (
-	"sync"
+	"NotaborEngine/notatomic"
 )
 
 type Scene struct {
-	Name     string
-	entities map[string]*Entity
-	mu       sync.RWMutex
+	Name string
+	// We wrap the entire map in an atomic pointer
+	entities notatomic.Pointer[map[string]*Entity]
 }
 
 func NewScene(name string) *Scene {
-	return &Scene{
-		Name:     name,
-		entities: make(map[string]*Entity),
+	s := &Scene{
+		Name: name,
 	}
+	initialMap := make(map[string]*Entity)
+	s.entities.Set(&initialMap)
+	return s
 }
 
-// Add an entity (returns the entity for chaining)
+// Add an entity
 func (s *Scene) Add(entity *Entity) *Entity {
 	if entity == nil || entity.ID == "" {
 		return entity
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.entities[entity.ID] = entity
-	return entity
+
+	for {
+		oldMapPtr := s.entities.Get()
+		// Shallow copy the map
+		newMap := make(map[string]*Entity, len(*oldMapPtr)+1)
+		for k, v := range *oldMapPtr {
+			newMap[k] = v
+		}
+		newMap[entity.ID] = entity
+
+		if s.entities.CompareAndSwap(oldMapPtr, &newMap) {
+			return entity
+		}
+	}
 }
 
 // Remove an entity
 func (s *Scene) Remove(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.entities, id)
+	for {
+		oldMapPtr := s.entities.Get()
+		if _, exists := (*oldMapPtr)[id]; !exists {
+			return // Nothing to do
+		}
+
+		newMap := make(map[string]*Entity, len(*oldMapPtr))
+		for k, v := range *oldMapPtr {
+			if k != id {
+				newMap[k] = v
+			}
+		}
+
+		if s.entities.CompareAndSwap(oldMapPtr, &newMap) {
+			return
+		}
+	}
 }
 
 // Get an entity by ID
 func (s *Scene) Get(id string) *Entity {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.entities[id]
+	// Snapshot the pointer and read from the map snapshot
+	m := *s.entities.Get()
+	return m[id]
 }
 
-// All returns all entities (for iteration)
+// All returns all entities
 func (s *Scene) All() []*Entity {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	entities := make([]*Entity, 0, len(s.entities))
-	for _, e := range s.entities {
+	m := *s.entities.Get()
+	entities := make([]*Entity, 0, len(m))
+	for _, e := range m {
 		entities = append(entities, e)
 	}
 	return entities
@@ -56,35 +80,18 @@ func (s *Scene) All() []*Entity {
 
 // Active returns only active entities
 func (s *Scene) Active() []*Entity {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	m := *s.entities.Get()
 	var active []*Entity
-	for _, e := range s.entities {
-		if e.Active {
+	for _, e := range m {
+		if e.Active.Get() {
 			active = append(active, e)
 		}
 	}
 	return active
 }
 
-// Visible returns only visible entities
-func (s *Scene) Visible() []*Entity {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var visible []*Entity
-	for _, e := range s.entities {
-		if e.Visible {
-			visible = append(visible, e)
-		}
-	}
-	return visible
-}
-
 // Clear removes all entities
 func (s *Scene) Clear() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.entities = make(map[string]*Entity)
+	emptyMap := make(map[string]*Entity)
+	s.entities.Set(&emptyMap)
 }

@@ -77,7 +77,7 @@ func (e *Engine) Run() error {
 }
 
 func (e *Engine) SetInputFrequency(Hz float32) {
-	e.inputLoop = &FixedHzLoop{Hz: Hz}
+	e.inputLoop = CreateFixedHzLoop(Hz)
 	e.inputLoop.Add(func() error {
 		if e.InputManager == nil {
 			return errors.New("InputManager is not initialized, initialize it first")

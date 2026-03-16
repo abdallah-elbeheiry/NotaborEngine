@@ -1,7 +1,9 @@
 package notacore
 
 import (
+	"NotaborEngine/notatomic"
 	"fmt"
+	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -24,53 +26,61 @@ var jobPool = sync.Pool{
 }
 
 type FixedHzLoop struct {
-	Hz float32
+	Hz           notatomic.Float32
+	monitorEvery notatomic.Int64 // Store as time.Duration (int64)
+	lastMonitor  notatomic.Pointer[time.Time]
 
-	mu               sync.Mutex
-	activeRunnables  []Runnable
-	nextRunnables    []Runnable
-	oneTimeRunnables []Runnable
+	lastTick  notatomic.Pointer[time.Time]
+	delta     notatomic.Int64 // stored as time.Duration (int64)
+	tickCount notatomic.UInt64
 
-	stop chan struct{}
-	wg   sync.WaitGroup
+	// Double-buffered slices
+	activeRunnables notatomic.Pointer[[]Runnable]
+	nextRunnables   notatomic.Pointer[[]Runnable]
 
-	lastTick time.Time
-	delta    time.Duration
-
-	monitorEvery time.Duration
-	lastMonitor  time.Time
-	tickCount    uint64
-
-	taskQueue  chan *job
+	stop       chan struct{}
 	workerDone chan struct{}
+	taskQueue  chan *job
+
+	wg         sync.WaitGroup
 	workerWg   sync.WaitGroup
 	numWorkers int
 }
 
 type RenderLoop struct {
-	MaxHz     float32
-	Runnables []Runnable
-	LastTime  time.Time
+	MaxHz     notatomic.Float32
+	Runnables notatomic.Pointer[[]Runnable]
+	LastTime  notatomic.Pointer[time.Time]
 }
 
 func (l *FixedHzLoop) EnableMonitor(interval time.Duration) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.monitorEvery = interval
-	l.lastMonitor = time.Now()
-	l.tickCount = 0
+	l.monitorEvery.Set(int64(interval))
+	now := time.Now()
+	l.lastMonitor.Set(&now)
+	l.tickCount.Set(0)
 }
 
 func (l *FixedHzLoop) Start() {
-	l.mu.Lock()
 	if l.stop != nil {
-		l.mu.Unlock()
 		return
 	}
 	l.stop = make(chan struct{})
-	l.mu.Unlock()
 
-	l.numWorkers = runtime.NumCPU()
+	if l.activeRunnables.Get() == nil {
+		active := make([]Runnable, 0)
+		l.activeRunnables.Set(&active)
+	}
+	if l.nextRunnables.Get() == nil {
+		next := make([]Runnable, 0)
+		l.nextRunnables.Set(&next)
+	}
+
+	if l.lastTick.Get() == nil {
+		now := time.Now()
+		l.lastTick.Set(&now)
+	}
+
+	l.numWorkers = runtime.NumCPU() - 1
 	if l.numWorkers < 1 {
 		l.numWorkers = 1
 	}
@@ -107,13 +117,15 @@ func (l *FixedHzLoop) worker() {
 }
 
 func (l *FixedHzLoop) Stop() {
-	l.mu.Lock()
 	if l.stop == nil {
-		l.mu.Unlock()
 		return
 	}
-	close(l.stop)
-	l.mu.Unlock()
+	select {
+	case <-l.stop:
+		return
+	default:
+		close(l.stop)
+	}
 
 	l.wg.Wait()
 	close(l.workerDone)
@@ -121,71 +133,88 @@ func (l *FixedHzLoop) Stop() {
 }
 
 func (l *FixedHzLoop) Add(r Runnable) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.nextRunnables = append(l.nextRunnables, r)
-}
+	const minCap = 32
 
-func (l *FixedHzLoop) Remove(i int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	for {
+		oldPtr := l.nextRunnables.Get()
+		var old []Runnable
+		if oldPtr != nil {
+			old = *oldPtr
+		}
 
-	last := len(l.activeRunnables) - 1
-	if i < 0 || i > last {
-		return
-	}
+		newLen := len(old) + 1
+		var newCap int
+		if len(old) < minCap {
+			newCap = minCap
+		} else {
+			newCap = len(old) * 2
+		}
 
-	l.activeRunnables[i] = l.activeRunnables[last]
-	l.activeRunnables[last] = nil
-	l.activeRunnables = l.activeRunnables[:last]
-}
+		newSlice := make([]Runnable, newLen, newCap)
+		copy(newSlice, old)
+		newSlice[len(old)] = r
 
-func (r *RenderLoop) Render() {
-	now := time.Now()
-	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-	for _, runnable := range r.Runnables {
-		if err := runnable(); err != nil {
-			fmt.Println("Render error:", err)
+		if l.nextRunnables.CompareAndSwap(oldPtr, &newSlice) {
+			return
 		}
 	}
-	r.LastTime = now
 }
 
-func (r *RenderLoop) Add(runnable Runnable) {
-	r.Runnables = append(r.Runnables, runnable)
+func (l *FixedHzLoop) Remove(r Runnable) {
+	targetPtr := reflect.ValueOf(r).Pointer()
+	for {
+		oldPtr := l.nextRunnables.Get()
+		oldSlice := *oldPtr
+
+		foundIdx := -1
+		for i, existing := range oldSlice {
+			if reflect.ValueOf(existing).Pointer() == targetPtr {
+				foundIdx = i
+				break
+			}
+		}
+
+		if foundIdx == -1 {
+			return
+		}
+
+		newSlice := make([]Runnable, 0, len(oldSlice)-1)
+		newSlice = append(newSlice, oldSlice[:foundIdx]...)
+		newSlice = append(newSlice, oldSlice[foundIdx+1:]...)
+
+		if l.nextRunnables.CompareAndSwap(oldPtr, &newSlice) {
+			return
+		}
+	}
 }
 
 func (l *FixedHzLoop) Alpha(now time.Time) float32 {
-	l.mu.Lock()
-	last := l.lastTick
-	delta := l.delta
-	l.mu.Unlock()
+	last := l.lastTick.Get()
+	delta := time.Duration(l.delta.Get())
 
-	if delta <= 0 {
+	if last == nil || delta <= 0 {
 		return 1
 	}
 
-	alpha := float32(now.Sub(last).Seconds() / delta.Seconds())
-	switch {
-	case alpha < 0:
+	alpha := float32(now.Sub(*last).Seconds() / delta.Seconds())
+	if alpha < 0 {
 		return 0
-	case alpha > 1:
-		return 1
-	default:
-		return alpha
 	}
+	if alpha > 1 {
+		return 1
+	}
+	return alpha
 }
 
 func (l *FixedHzLoop) runLoop() {
 	defer l.wg.Done()
 
-	l.mu.Lock()
-	interval := time.Duration(float64(time.Second) / float64(l.Hz))
-	l.delta = interval
-	l.lastTick = time.Now()
-	l.mu.Unlock()
+	hz := l.Hz.Get()
+	if hz <= 0 {
+		hz = 60
+	}
+	interval := time.Duration(float64(time.Second) / float64(hz))
+	l.delta.Set(int64(interval))
 
 	nextTick := time.Now().Add(interval)
 
@@ -196,80 +225,85 @@ func (l *FixedHzLoop) runLoop() {
 		default:
 		}
 
-		sw := 10 * time.Microsecond
+		l.waitUntil(nextTick)
+		l.lastTick.Set(&nextTick)
 
-		l.waitUntil(nextTick, sw)
+		ptrNext := l.nextRunnables.Get()
+		if ptrNext != nil {
+			runnablesToRun := *ptrNext
+			empty := make([]Runnable, 0)
+			l.nextRunnables.Set(&empty)
 
-		now := time.Now()
-		atr, otr, monitorEvery, lastMonitor := l.swapBuffers(now)
+			if len(runnablesToRun) > 0 {
+				remainingActive := l.runRunnablesParallel(runnablesToRun)
+				l.mergeBack(remainingActive)
+			}
+		}
 
-		l.runOneTimeRunnables(otr)
-		newActive := l.runRunnablesParallel(atr)
+		l.tickCount.Add(1)
+		l.maybeReportMetrics()
 
-		l.mu.Lock()
-		l.nextRunnables = append(l.nextRunnables, newActive...)
-		l.tickCount++
-		l.maybeReportMetrics(monitorEvery, lastMonitor)
+		// Update Interval (in case Hz changed)
+		newHz := l.Hz.Get()
+		if newHz != hz && newHz > 0 {
+			hz = newHz
+			interval = time.Duration(float64(time.Second) / float64(hz))
+			l.delta.Set(int64(interval))
+		}
 
-		interval = time.Duration(float64(time.Second) / float64(l.Hz))
-		l.mu.Unlock()
-
-		nextTick = l.scheduleNextTick(nextTick, interval)
+		nextTick = nextTick.Add(interval)
 	}
 }
 
-func (l *FixedHzLoop) waitUntil(nextTick time.Time, sw time.Duration) {
+func (l *FixedHzLoop) mergeBack(runnables []Runnable) {
+	if len(runnables) == 0 {
+		return
+	}
+
+	const minCap = 32
+
 	for {
-		remaining := time.Until(nextTick)
-		if remaining <= 0 {
-			break
+		oldPtr := l.nextRunnables.Get()
+		var old []Runnable
+		if oldPtr != nil {
+			old = *oldPtr
 		}
 
-		if remaining > sw {
-			time.Sleep(remaining - sw)
-			continue
+		newLen := len(old) + len(runnables)
+		var newCap int
+		if newLen < minCap {
+			newCap = minCap
+		} else {
+			newCap = newLen * 2
 		}
 
-		// Tight spin for the final micro-period to hit the 0.25ms-0.5ms targets.
-		for time.Now().Before(nextTick) {
-			// No-op loop to maintain CPU ownership for precision
-			runtime.KeepAlive(nil)
+		newSlice := make([]Runnable, newLen, newCap)
+		copy(newSlice, old)
+		copy(newSlice[len(old):], runnables)
+
+		if l.nextRunnables.CompareAndSwap(oldPtr, &newSlice) {
+			return
 		}
-		break
 	}
 }
 
-func (l *FixedHzLoop) swapBuffers(now time.Time) (active, oneTime []Runnable, monitorEvery time.Duration, lastMonitor time.Time) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.lastTick = now
-	oneTime = l.oneTimeRunnables
-	l.oneTimeRunnables = nil
-
-	active = l.activeRunnables
-	l.activeRunnables = l.nextRunnables
-	l.nextRunnables = active[:0]
-
-	return active, oneTime, l.monitorEvery, l.lastMonitor
-}
-
-func (l *FixedHzLoop) runOneTimeRunnables(runnables []Runnable) {
-	for _, r := range runnables {
-		if err := r(); err != nil {
-			fmt.Println(err)
-		}
+func (l *FixedHzLoop) waitUntil(nextTick time.Time) {
+	remaining := time.Until(nextTick)
+	if remaining > 0 {
+		time.Sleep(remaining)
 	}
 }
 
 func (l *FixedHzLoop) runRunnablesParallel(runnables []Runnable) []Runnable {
-	if len(runnables) == 0 {
+	count := len(runnables)
+	if count == 0 {
 		return runnables[:0]
 	}
 
+	results := make([]error, count)
+
 	var tickWg sync.WaitGroup
-	results := make([]error, len(runnables))
-	jobsUsed := make([]*job, 0, len(runnables))
+	jobsUsed := make([]*job, 0, count)
 
 	for i, r := range runnables {
 		tickWg.Add(1)
@@ -290,41 +324,108 @@ func (l *FixedHzLoop) runRunnablesParallel(runnables []Runnable) []Runnable {
 		jobPool.Put(j)
 	}
 
-	newActive := runnables[:0]
-	for i, r := range runnables {
+	newIdx := 0
+	for i := 0; i < count; i++ {
 		if results[i] == nil {
-			newActive = append(newActive, r)
+			runnables[newIdx] = runnables[i]
+			newIdx++
 		} else {
 			fmt.Println("Runnable error:", results[i])
 		}
 	}
-	return newActive
+
+	for i := newIdx; i < count; i++ {
+		runnables[i] = nil
+	}
+
+	return runnables[:newIdx]
 }
 
-func (l *FixedHzLoop) maybeReportMetrics(monitorEvery time.Duration, lastMonitor time.Time) {
-	if monitorEvery == 0 || time.Since(l.lastMonitor) < monitorEvery {
+func (l *FixedHzLoop) maybeReportMetrics() {
+	monitorEvery := time.Duration(l.monitorEvery.Get())
+	lastMonPtr := l.lastMonitor.Get()
+
+	if monitorEvery == 0 || lastMonPtr == nil || time.Since(*lastMonPtr) < monitorEvery {
 		return
 	}
 
-	elapsed := time.Since(lastMonitor)
-	hz := float64(l.tickCount) / elapsed.Seconds()
-	avgTickMs := (elapsed.Seconds() * 1000.0) / float64(l.tickCount)
+	elapsed := time.Since(*lastMonPtr)
+	count := l.tickCount.GetAndSet(0)
+	hz := float64(count) / elapsed.Seconds()
+	avgTickMs := (elapsed.Seconds() * 1000.0) / float64(count)
 
-	fmt.Printf("[FixedHzLoop] Target=%.0f Hz, Actual=%.1f Hz, AvgTick=%.4f ms\n", l.Hz, hz, avgTickMs)
+	fmt.Printf("[FixedHzLoop] Target=%.0f Hz, Actual=%.1f Hz, AvgTick=%.4f ms\n", l.Hz.Get(), hz, avgTickMs)
 
-	l.lastMonitor = time.Now()
-	l.tickCount = 0
+	now := time.Now()
+	l.lastMonitor.Set(&now)
 }
 
-func (l *FixedHzLoop) scheduleNextTick(nextTick time.Time, interval time.Duration) time.Time {
-	// Add the interval to the theoretical next tick time.
-	nextTick = nextTick.Add(interval)
+func (r *RenderLoop) Render() {
+	now := time.Now()
+	r.LastTime.Set(&now)
 
-	// If we are extremely late
-	// reset to Now to prevent a massive "catch-up" burst that would freeze the app.
-	if time.Since(nextTick) > 5*time.Millisecond {
-		return time.Now().Add(interval)
+	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+	runnablesPtr := r.Runnables.Get()
+	if runnablesPtr != nil {
+		for _, runnable := range *runnablesPtr {
+			if err := runnable(); err != nil {
+				fmt.Println("Render error:", err)
+			}
+		}
 	}
+}
 
-	return nextTick
+func (r *RenderLoop) Add(runnable Runnable) {
+	const minCap = 32
+
+	for {
+		oldPtr := r.Runnables.Get()
+		var old []Runnable
+		if oldPtr != nil {
+			old = *oldPtr
+		}
+
+		newLen := len(old) + 1
+		var newCap int
+		if newLen < minCap {
+			newCap = minCap
+		} else {
+			newCap = newLen * 2
+		}
+
+		newSlice := make([]Runnable, newLen, newCap)
+		copy(newSlice, old)
+		newSlice[len(old)] = runnable
+
+		if r.Runnables.CompareAndSwap(oldPtr, &newSlice) {
+			return
+		}
+	}
+}
+
+func CreateFixedHzLoop(Hz float32) *FixedHzLoop {
+	loop := &FixedHzLoop{}
+	loop.Hz.Set(Hz)
+	active := make([]Runnable, 0)
+	next := make([]Runnable, 0)
+	loop.activeRunnables.Set(&active)
+	loop.nextRunnables.Set(&next)
+	now := time.Now()
+	loop.lastTick.Set(&now)
+	loop.lastMonitor.Set(&now)
+
+	return loop
+}
+
+func CreateRenderLoop(Hz float32) *RenderLoop {
+	loop := &RenderLoop{}
+	loop.MaxHz.Set(Hz)
+	r := make([]Runnable, 0)
+	loop.Runnables.Set(&r)
+	now := time.Now()
+	loop.LastTime.Set(&now)
+
+	return loop
 }

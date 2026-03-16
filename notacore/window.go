@@ -99,7 +99,7 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 		RunTime: windowRunTime{
 			WindowBaseRuntime: WindowBaseRuntime{
 				lastRender: time.Now(),
-				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz),
+				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz.Get()),
 			},
 			backend:    &notaobject.GLBackend{},
 			Renderer:   &notaobject.Renderer{},
