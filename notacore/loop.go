@@ -2,6 +2,7 @@ package notacore
 
 import (
 	"NotaborEngine/notatomic"
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -12,6 +13,8 @@ import (
 )
 
 type Runnable func() error
+
+var ErrDone = errors.New("runnable finished")
 
 type job struct {
 	runnable Runnable
@@ -35,8 +38,7 @@ type FixedHzLoop struct {
 	tickCount notatomic.UInt64
 
 	// Double-buffered slices
-	activeRunnables notatomic.Pointer[[]Runnable]
-	nextRunnables   notatomic.Pointer[[]Runnable]
+	Runnables notatomic.Pointer[[]Runnable]
 
 	stop       chan struct{}
 	workerDone chan struct{}
@@ -66,13 +68,9 @@ func (l *FixedHzLoop) Start() {
 	}
 	l.stop = make(chan struct{})
 
-	if l.activeRunnables.Get() == nil {
-		active := make([]Runnable, 0)
-		l.activeRunnables.Set(&active)
-	}
-	if l.nextRunnables.Get() == nil {
+	if l.Runnables.Get() == nil {
 		next := make([]Runnable, 0)
-		l.nextRunnables.Set(&next)
+		l.Runnables.Set(&next)
 	}
 
 	if l.lastTick.Get() == nil {
@@ -136,7 +134,7 @@ func (l *FixedHzLoop) Add(r Runnable) {
 	const minCap = 32
 
 	for {
-		oldPtr := l.nextRunnables.Get()
+		oldPtr := l.Runnables.Get()
 		var old []Runnable
 		if oldPtr != nil {
 			old = *oldPtr
@@ -154,7 +152,7 @@ func (l *FixedHzLoop) Add(r Runnable) {
 		copy(newSlice, old)
 		newSlice[len(old)] = r
 
-		if l.nextRunnables.CompareAndSwap(oldPtr, &newSlice) {
+		if l.Runnables.CompareAndSwap(oldPtr, &newSlice) {
 			return
 		}
 	}
@@ -163,7 +161,7 @@ func (l *FixedHzLoop) Add(r Runnable) {
 func (l *FixedHzLoop) Remove(r Runnable) {
 	targetPtr := reflect.ValueOf(r).Pointer()
 	for {
-		oldPtr := l.nextRunnables.Get()
+		oldPtr := l.Runnables.Get()
 		oldSlice := *oldPtr
 
 		foundIdx := -1
@@ -182,7 +180,7 @@ func (l *FixedHzLoop) Remove(r Runnable) {
 		newSlice = append(newSlice, oldSlice[:foundIdx]...)
 		newSlice = append(newSlice, oldSlice[foundIdx+1:]...)
 
-		if l.nextRunnables.CompareAndSwap(oldPtr, &newSlice) {
+		if l.Runnables.CompareAndSwap(oldPtr, &newSlice) {
 			return
 		}
 	}
@@ -228,11 +226,11 @@ func (l *FixedHzLoop) runLoop() {
 		l.waitUntil(nextTick)
 		l.lastTick.Set(&nextTick)
 
-		ptrNext := l.nextRunnables.Get()
+		ptrNext := l.Runnables.Get()
 		if ptrNext != nil {
 			runnablesToRun := *ptrNext
 			empty := make([]Runnable, 0)
-			l.nextRunnables.Set(&empty)
+			l.Runnables.Set(&empty)
 
 			if len(runnablesToRun) > 0 {
 				remainingActive := l.runRunnablesParallel(runnablesToRun)
@@ -263,7 +261,7 @@ func (l *FixedHzLoop) mergeBack(runnables []Runnable) {
 	const minCap = 32
 
 	for {
-		oldPtr := l.nextRunnables.Get()
+		oldPtr := l.Runnables.Get()
 		var old []Runnable
 		if oldPtr != nil {
 			old = *oldPtr
@@ -281,7 +279,7 @@ func (l *FixedHzLoop) mergeBack(runnables []Runnable) {
 		copy(newSlice, old)
 		copy(newSlice[len(old):], runnables)
 
-		if l.nextRunnables.CompareAndSwap(oldPtr, &newSlice) {
+		if l.Runnables.CompareAndSwap(oldPtr, &newSlice) {
 			return
 		}
 	}
@@ -326,12 +324,19 @@ func (l *FixedHzLoop) runRunnablesParallel(runnables []Runnable) []Runnable {
 
 	newIdx := 0
 	for i := 0; i < count; i++ {
-		if results[i] == nil {
+		err := results[i]
+
+		if err == nil {
 			runnables[newIdx] = runnables[i]
 			newIdx++
-		} else {
-			fmt.Println("Runnable error:", results[i])
+			continue
 		}
+
+		if errors.Is(err, ErrDone) {
+			continue // remove silently
+		}
+
+		fmt.Println("Runnable error:", err)
 	}
 
 	for i := newIdx; i < count; i++ {
@@ -408,10 +413,8 @@ func (r *RenderLoop) Add(runnable Runnable) {
 func CreateFixedHzLoop(Hz float32) *FixedHzLoop {
 	loop := &FixedHzLoop{}
 	loop.Hz.Set(Hz)
-	active := make([]Runnable, 0)
 	next := make([]Runnable, 0)
-	loop.activeRunnables.Set(&active)
-	loop.nextRunnables.Set(&next)
+	loop.Runnables.Set(&next)
 	now := time.Now()
 	loop.lastTick.Set(&now)
 	loop.lastMonitor.Set(&now)
@@ -428,4 +431,140 @@ func CreateRenderLoop(Hz float32) *RenderLoop {
 	loop.LastTime.Set(&now)
 
 	return loop
+}
+
+// Once wraps around a runnable making it run once
+func Once(fn Runnable) Runnable {
+	ran := false
+
+	return func() error {
+		if ran {
+			return ErrDone
+		}
+
+		ran = true
+
+		if err := fn(); err != nil {
+			return err
+		}
+
+		return ErrDone
+	}
+}
+
+// Delay wraps around the runnable, making it run once after a duration
+func Delay(fn Runnable, d time.Duration) Runnable {
+	start := time.Now()
+
+	return func() error {
+		if time.Since(start) < d {
+			return nil
+		}
+
+		if err := fn(); err != nil {
+			return err
+		}
+		return ErrDone
+	}
+}
+
+// Every wraps around the runnable, making it run every duration
+func Every(fn Runnable, interval time.Duration) Runnable {
+	last := time.Now()
+
+	return func() error {
+		if time.Since(last) < interval {
+			return nil
+		}
+
+		last = time.Now()
+		if err := fn(); err != nil {
+			return err
+		}
+
+		return nil
+	}
+}
+
+// AfterTicks wraps around the runnable, making it run once after a number of ticks
+func AfterTicks(fn Runnable, ticks int) Runnable {
+	count := 0
+
+	return func() error {
+		count++
+
+		if count < ticks {
+			return nil
+		}
+
+		if err := fn(); err != nil {
+			return err
+		}
+		return ErrDone
+	}
+}
+
+// EveryTicks wraps around the runnable, making it run every number of ticks
+func EveryTicks(fn Runnable, ticks int) Runnable {
+	count := 0
+
+	return func() error {
+		count++
+
+		if count < ticks {
+			return nil
+		}
+
+		count = 0
+		if err := fn(); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+// Repeat wraps around the runnable, making it run a number of times
+func Repeat(fn Runnable, times int) Runnable {
+	count := 0
+	return func() error {
+		if err := fn(); err != nil {
+			return err
+		}
+
+		count++
+
+		if count < times {
+			return nil
+		}
+		return ErrDone
+	}
+}
+
+// RepeatUntil wraps around the runnable, making it run a number of times until a condition is met
+func RepeatUntil(fn Runnable, cond func() bool) Runnable {
+	return func() error {
+		if err := fn(); err != nil {
+			return err
+		}
+
+		if cond() {
+			return ErrDone
+		}
+		return nil
+	}
+}
+
+// FinishAfter wraps around the runnable, making it run until a duration has passed
+func FinishAfter(fn Runnable, d time.Duration) Runnable {
+	start := time.Now()
+	return func() error {
+		if err := fn(); err != nil {
+			return err
+		}
+
+		if time.Since(start) < d {
+			return nil
+		}
+		return ErrDone
+	}
 }
