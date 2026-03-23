@@ -20,11 +20,11 @@ type Settings struct {
 
 type Engine struct {
 	Windows       []*Window
-	Settings      *Settings
 	WindowManager *windowManager
 	InputManager  *InputManager
 	SoundManager  *notasound.SoundManager
 
+	settings  *Settings
 	inputLoop *FixedHzLoop
 	running   bool
 }
@@ -177,7 +177,7 @@ func CreateEngine(settings *Settings) (*Engine, error) {
 
 	e := &Engine{
 		Windows:       []*Window{},
-		Settings:      settings,
+		settings:      settings,
 		WindowManager: &windowManager{},
 		SoundManager:  audio,
 	}
@@ -185,7 +185,7 @@ func CreateEngine(settings *Settings) (*Engine, error) {
 }
 
 func (e *Engine) ChangeSettings(settings *Settings) {
-	e.Settings = settings
+	e.settings = settings
 	e.SoundManager.Mute = settings.Muted
 	e.SoundManager.MasterVolume = settings.SoundLevel
 }
