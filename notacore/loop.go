@@ -239,7 +239,6 @@ func (l *FixedHzLoop) runLoop() {
 		}
 
 		l.tickCount.Add(1)
-		l.maybeReportMetrics()
 
 		// Update Interval (in case Hz changed)
 		newHz := l.Hz.Get()
@@ -344,25 +343,6 @@ func (l *FixedHzLoop) runRunnablesParallel(runnables []Runnable) []Runnable {
 	}
 
 	return runnables[:newIdx]
-}
-
-func (l *FixedHzLoop) maybeReportMetrics() {
-	monitorEvery := time.Duration(l.monitorEvery.Get())
-	lastMonPtr := l.lastMonitor.Get()
-
-	if monitorEvery == 0 || lastMonPtr == nil || time.Since(*lastMonPtr) < monitorEvery {
-		return
-	}
-
-	elapsed := time.Since(*lastMonPtr)
-	count := l.tickCount.GetAndSet(0)
-	hz := float64(count) / elapsed.Seconds()
-	avgTickMs := (elapsed.Seconds() * 1000.0) / float64(count)
-
-	fmt.Printf("[FixedHzLoop] Target=%.0f Hz, Actual=%.1f Hz, AvgTick=%.4f ms\n", l.Hz.Get(), hz, avgTickMs)
-
-	now := time.Now()
-	l.lastMonitor.Set(&now)
 }
 
 func (r *RenderLoop) Render() {

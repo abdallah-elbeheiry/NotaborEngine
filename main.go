@@ -6,12 +6,15 @@ import (
 	"NotaborEngine/notamath"
 	"NotaborEngine/notaobject"
 	"NotaborEngine/notasound"
+	"NotaborEngine/notatomic"
+	"fmt"
 	"log"
+	"time"
 )
 
 func main() {
 	// START OF ENGINE SETUP
-	Settings := &notacore.Settings{Vsync: true, SoundLevel: 1, Muted: false}
+	Settings := &notacore.Settings{Vsync: true, SoundLevel: 0.2, Muted: false}
 	engine, err := notacore.CreateEngine(Settings)
 	if err != nil {
 		log.Fatal(err)
@@ -19,7 +22,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := notacore.CreateRenderLoop(60)
-	logicLoop := notacore.CreateFixedHzLoop(10000)
+	logicLoop := notacore.CreateFixedHzLoop(150000)
 
 	engine.SetInputFrequency(3000)
 	engine.SoundManager.SetSoundsFolder("resources/sounds")
@@ -139,6 +142,17 @@ func main() {
 		}
 		return nil
 	})
+
+	i := notatomic.Int64{}
+	logicLoop.Add(notacore.FinishAfter(func() error {
+		i.Inc()
+		return nil
+	}, time.Second*10))
+
+	logicLoop.Add(notacore.Delay(func() error {
+		fmt.Printf("Average Hz: %d\n", i.Get()/10)
+		return nil
+	}, time.Second*11))
 	// END OF GAME LOGIC
 
 	// RUN ENGINE

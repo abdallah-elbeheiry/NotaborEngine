@@ -93,30 +93,29 @@ func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, lo
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
-		m.activeSounds.Store(sound, p)
 	}()
 	return nil
 }
 
 func (m *SoundManager) Stop(sound string) {
 	if val, ok := m.activeSounds.Load(sound); ok {
-		p := val.(*oto.Player)
-		p.Pause()
+		if track, ok := val.(*activeTrack); ok {
+			track.player.Pause()
+			_, _ = track.player.Seek(0, 0)
+		}
 		m.activeSounds.Delete(sound)
-		_, _ = p.Seek(0, 0)
 	}
 }
 
 func (m *SoundManager) UpdateLiveVolume() {
 	m.activeSounds.Range(func(key, value any) bool {
-		track := value.(*activeTrack)
-
-		finalVol := track.localVolume * m.MasterVolume
-		if m.Mute {
-			finalVol = 0
+		if track, ok := value.(*activeTrack); ok {
+			vol := float64(track.localVolume * m.MasterVolume)
+			if m.Mute {
+				vol = 0
+			}
+			track.player.SetVolume(vol)
 		}
-
-		track.player.SetVolume(float64(finalVol))
 		return true
 	})
 }
