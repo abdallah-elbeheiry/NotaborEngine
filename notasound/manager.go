@@ -20,6 +20,11 @@ type SoundManager struct {
 	Mute         bool
 }
 
+type activeTrack struct {
+	player      *oto.Player
+	localVolume float32
+}
+
 // NewSoundManager creates a new SoundManager
 func NewSoundManager() (*SoundManager, error) {
 	ctx, ready, err := newOtoContext(44100)
@@ -69,6 +74,10 @@ func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, lo
 			soundVolume = 0
 		}
 		p := play(m.ctx, s, soundVolume)
+		m.activeSounds.Store(sound, &activeTrack{
+			player:      p,
+			localVolume: volume,
+		})
 		m.activeSounds.Store(sound, p)
 
 		if loop {
@@ -100,13 +109,14 @@ func (m *SoundManager) Stop(sound string) {
 
 func (m *SoundManager) UpdateLiveVolume() {
 	m.activeSounds.Range(func(key, value any) bool {
-		p := value.(*oto.Player)
+		track := value.(*activeTrack)
 
+		finalVol := track.localVolume * m.MasterVolume
 		if m.Mute {
-			p.SetVolume(0)
-		} else {
-			p.SetVolume(float64(m.MasterVolume))
+			finalVol = 0
 		}
+
+		track.player.SetVolume(float64(finalVol))
 		return true
 	})
 }
