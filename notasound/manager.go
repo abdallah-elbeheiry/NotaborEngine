@@ -16,7 +16,7 @@ type SoundManager struct {
 
 	soundsFolder string
 	folderGiven  bool
-	MasterVolume float32 // Linked to Engine Settings
+	MasterVolume float32 // Linked to Engine settings
 	Mute         bool
 }
 
