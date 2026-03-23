@@ -13,9 +13,9 @@ import (
 )
 
 type Settings struct {
-	Vsync      bool
-	Muted      bool
-	SoundLevel float32
+	Vsync      bool    //Locks FPS to monitor's refresh rate
+	Muted      bool    //Completely disables sound
+	SoundLevel float32 //Volume of sound (1 = 100%)
 }
 
 type Engine struct {
@@ -170,7 +170,7 @@ func addNativeDLLPath() error {
 }
 
 func CreateEngine(settings *Settings) (*Engine, error) {
-	audio, err := notasound.NewSoundManager()
+	audio, err := notasound.NewSoundManager(settings.SoundLevel, settings.Muted)
 	if err != nil {
 		return nil, err
 	}
@@ -182,4 +182,10 @@ func CreateEngine(settings *Settings) (*Engine, error) {
 		SoundManager:  audio,
 	}
 	return e, e.initPlatform()
+}
+
+func (e *Engine) ChangeSettings(settings *Settings) {
+	e.Settings = settings
+	e.SoundManager.Mute = settings.Muted
+	e.SoundManager.MasterVolume = settings.SoundLevel
 }

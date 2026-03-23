@@ -10,7 +10,8 @@ import (
 )
 
 func main() {
-	Settings := &notacore.Settings{Vsync: true, SoundLevel: 1}
+	// START OF ENGINE SETUP
+	Settings := &notacore.Settings{Vsync: true, SoundLevel: 1, Muted: false}
 	engine, err := notacore.CreateEngine(Settings)
 	if err != nil {
 		log.Fatal(err)
@@ -18,8 +19,15 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := notacore.CreateRenderLoop(60)
-	logicLoop := notacore.CreateFixedHzLoop(1000)
+	logicLoop := notacore.CreateFixedHzLoop(10000)
 
+	engine.SetInputFrequency(3000)
+	engine.SoundManager.SetSoundsFolder("resources/sounds")
+	im := engine.InputManager
+
+	// END OF ENGINE SETUP
+
+	// START OF WINDOW CREATION
 	cfg := notacore.WindowConfig{
 		X:          50,
 		Y:          50,
@@ -36,12 +44,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// END OF WINDOW CREATION
 
-	engine.SetInputFrequency(3000)
-	engine.SoundManager.SetSoundsFolder("resources/sounds")
-	im := engine.InputManager
-
-	// load texture and create entity
+	// START OF ENTITY CREATION
 	texture, err := win.LoadTexture("test", "resources/images/hahaha.jpg")
 	if err != nil {
 		log.Fatal(err)
@@ -73,15 +78,13 @@ func main() {
 	rect2.SetColor(notaobject.Red)
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
-	// Render loop
+	//add draw calls
 	renderLoop.Add(func() error { entity.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity1.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })
+	// END OF ENTITY CREATION
 
-	// Movement speed
-	speed := float32(0.001)
-
-	// input
+	// START OF INPUT MAPPING
 	sigW := &notacore.InputSignal{}
 	sigA := &notacore.InputSignal{}
 	sigS := &notacore.InputSignal{}
@@ -103,8 +106,13 @@ func main() {
 	im.BindAction(sigA, actA)
 	im.BindAction(sigS, actS)
 	im.BindAction(sigD, actD)
+	// END OF INPUT MAPPING
 
+	// START OF GAME LOGIC
 	var deltaMove notamath.Vec2
+
+	// Movement speed
+	speed := float32(0.001)
 
 	actW.AddRunnable(func() error { deltaMove.Y += speed; return nil })
 	actS.AddRunnable(func() error { deltaMove.Y -= speed; return nil })
@@ -123,7 +131,7 @@ func main() {
 	logicLoop.Add(func() error {
 		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
-			err := engine.SoundManager.Play("ding.mp3", notasound.MP3)
+			err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
 			if err != nil {
 				return err
 			}
@@ -131,8 +139,9 @@ func main() {
 		}
 		return nil
 	})
+	// END OF GAME LOGIC
 
-	// Run engine
+	// RUN ENGINE
 	if err := engine.Run(); err != nil {
 		log.Fatal("Engine run failed:", err)
 	}
