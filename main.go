@@ -10,11 +10,10 @@ import (
 )
 
 func main() {
-	engine := &notacore.Engine{
-		Settings: &notacore.Settings{Vsync: true},
-	}
-	if err := engine.InitPlatform(); err != nil {
-		log.Fatal("Init failed:", err)
+	Settings := &notacore.Settings{Vsync: true, SoundLevel: 1}
+	engine, err := notacore.CreateEngine(Settings)
+	if err != nil {
+		log.Fatal(err)
 	}
 	defer engine.Shutdown()
 
@@ -39,6 +38,7 @@ func main() {
 	}
 
 	engine.SetInputFrequency(3000)
+	engine.SoundManager.SetSoundsFolder("resources/sounds")
 	im := engine.InputManager
 
 	// load texture and create entity
@@ -77,9 +77,6 @@ func main() {
 	renderLoop.Add(func() error { entity.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity1.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })
-
-	audio, _ := notasound.NewSoundManager()
-	audio.SetSoundsFolder("resources/sounds")
 
 	// Movement speed
 	speed := float32(0.001)
@@ -126,7 +123,7 @@ func main() {
 	logicLoop.Add(func() error {
 		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
-			err := audio.Play("ding.mp3", notasound.MP3)
+			err := engine.SoundManager.Play("ding.mp3", notasound.MP3)
 			if err != nil {
 				return err
 			}

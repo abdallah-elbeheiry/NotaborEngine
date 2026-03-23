@@ -1,6 +1,7 @@
 package notacore
 
 import (
+	"NotaborEngine/notasound"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,7 +13,9 @@ import (
 )
 
 type Settings struct {
-	Vsync bool
+	Vsync      bool
+	Muted      bool
+	SoundLevel float32
 }
 
 type Engine struct {
@@ -20,6 +23,7 @@ type Engine struct {
 	Settings      *Settings
 	WindowManager *windowManager
 	InputManager  *InputManager
+	SoundManager  *notasound.SoundManager
 
 	inputLoop *FixedHzLoop
 	running   bool
@@ -100,7 +104,7 @@ func (e *Engine) Shutdown() {
 	glfw.Terminate()
 }
 
-func (e *Engine) InitPlatform() error {
+func (e *Engine) initPlatform() error {
 	runtime.LockOSThread()
 
 	if err := addNativeDLLPath(); err != nil {
@@ -163,4 +167,19 @@ func addNativeDLLPath() error {
 		// return unsupported platform error
 	}
 	return nil
+}
+
+func CreateEngine(settings *Settings) (*Engine, error) {
+	audio, err := notasound.NewSoundManager()
+	if err != nil {
+		return nil, err
+	}
+
+	e := &Engine{
+		Windows:       []*Window{},
+		Settings:      settings,
+		WindowManager: &windowManager{},
+		SoundManager:  audio,
+	}
+	return e, e.initPlatform()
 }
