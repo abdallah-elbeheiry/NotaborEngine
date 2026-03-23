@@ -21,17 +21,15 @@ type SoundManager struct {
 }
 
 // NewSoundManager creates a new SoundManager
-func NewSoundManager(masterVolume float32, mute bool) (*SoundManager, error) {
+func NewSoundManager() (*SoundManager, error) {
 	ctx, ready, err := newOtoContext(44100)
 	if err != nil {
 		return nil, err
 	}
 
 	return &SoundManager{
-		ctx:          ctx,
-		ready:        ready,
-		MasterVolume: masterVolume,
-		Mute:         mute,
+		ctx:   ctx,
+		ready: ready,
 	}, nil
 }
 
@@ -41,9 +39,6 @@ func (m *SoundManager) SetSoundsFolder(path string) {
 }
 
 func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, loop bool) error {
-	if m.Mute {
-		return nil
-	}
 	if !m.folderGiven {
 		return errors.New("SoundManager: sounds folder not set")
 	}
@@ -69,8 +64,11 @@ func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, lo
 			m.cache.Store(fullPath, s)
 		}
 
-		// Calculate combined volume
-		p := play(m.ctx, s, m.MasterVolume*volume)
+		soundVolume := volume * m.MasterVolume
+		if m.Mute {
+			soundVolume = 0
+		}
+		p := play(m.ctx, s, soundVolume)
 		m.activeSounds.Store(sound, p)
 
 		if loop {
@@ -98,4 +96,17 @@ func (m *SoundManager) Stop(sound string) {
 		m.activeSounds.Delete(sound)
 		_, _ = p.Seek(0, 0)
 	}
+}
+
+func (m *SoundManager) UpdateLiveVolume() {
+	m.activeSounds.Range(func(key, value any) bool {
+		p := value.(*oto.Player)
+
+		if m.Mute {
+			p.SetVolume(0)
+		} else {
+			p.SetVolume(float64(m.MasterVolume))
+		}
+		return true
+	})
 }

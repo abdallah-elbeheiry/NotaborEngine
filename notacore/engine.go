@@ -141,6 +141,11 @@ func (e *Engine) CreateWindow(cfg WindowConfig) (*Window, error) {
 		return nil, err
 	}
 	win.RunTime.backend.Init()
+	if e.settings.Vsync {
+		glfw.SwapInterval(1)
+	} else {
+		glfw.SwapInterval(0)
+	}
 	e.Windows = append(e.Windows, win)
 	return win, nil
 }
@@ -170,7 +175,7 @@ func addNativeDLLPath() error {
 }
 
 func CreateEngine(settings *Settings) (*Engine, error) {
-	audio, err := notasound.NewSoundManager(settings.SoundLevel, settings.Muted)
+	audio, err := notasound.NewSoundManager()
 	if err != nil {
 		return nil, err
 	}
@@ -181,11 +186,26 @@ func CreateEngine(settings *Settings) (*Engine, error) {
 		WindowManager: &windowManager{},
 		SoundManager:  audio,
 	}
+	e.ChangeSettings(settings)
 	return e, e.initPlatform()
 }
 
+// ChangeSettings changes the engine's settings and updates all engine components appropriately
 func (e *Engine) ChangeSettings(settings *Settings) {
 	e.settings = settings
 	e.SoundManager.Mute = settings.Muted
 	e.SoundManager.MasterVolume = settings.SoundLevel
+
+	if len(e.Windows) > 0 {
+		if settings.Vsync {
+			glfw.SwapInterval(1)
+		} else {
+			glfw.SwapInterval(0)
+		}
+	}
+}
+
+// GetSettings returns the engine's settings as a copy
+func (e *Engine) GetSettings() Settings {
+	return *e.settings
 }
