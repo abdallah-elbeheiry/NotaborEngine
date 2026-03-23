@@ -435,19 +435,10 @@ func CreateRenderLoop(Hz float32) *RenderLoop {
 
 // Once wraps around a runnable making it run once
 func Once(fn Runnable) Runnable {
-	ran := false
-
 	return func() error {
-		if ran {
-			return ErrDone
-		}
-
-		ran = true
-
 		if err := fn(); err != nil {
 			return err
 		}
-
 		return ErrDone
 	}
 }
@@ -477,7 +468,7 @@ func Every(fn Runnable, interval time.Duration) Runnable {
 			return nil
 		}
 
-		last = time.Now()
+		last = last.Add(interval)
 		if err := fn(); err != nil {
 			return err
 		}

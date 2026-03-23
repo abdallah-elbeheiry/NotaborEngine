@@ -5,8 +5,8 @@ import (
 	"NotaborEngine/notacore"
 	"NotaborEngine/notamath"
 	"NotaborEngine/notaobject"
+	"NotaborEngine/notasound"
 	"log"
-	"time"
 )
 
 func main() {
@@ -19,8 +19,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := notacore.CreateRenderLoop(60)
-	logicLoop := notacore.CreateFixedHzLoop(200000)
-	logicLoop.EnableMonitor(time.Second)
+	logicLoop := notacore.CreateFixedHzLoop(1000)
 
 	cfg := notacore.WindowConfig{
 		X:          50,
@@ -42,8 +41,8 @@ func main() {
 	engine.SetInputFrequency(3000)
 	im := engine.InputManager
 
-	// Load texture and create entity
-	texture, err := win.LoadTexture("test", "resources/hahaha.jpg")
+	// load texture and create entity
+	texture, err := win.LoadTexture("test", "resources/images/hahaha.jpg")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,6 +77,9 @@ func main() {
 	renderLoop.Add(func() error { entity.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity1.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })
+
+	audio, _ := notasound.NewSoundManager()
+	audio.SetSoundsFolder("resources/sounds")
 
 	// Movement speed
 	speed := float32(0.001)
@@ -124,6 +126,10 @@ func main() {
 	logicLoop.Add(func() error {
 		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
+			err := audio.Play("ding.mp3", notasound.MP3)
+			if err != nil {
+				return err
+			}
 			val *= -1
 		}
 		return nil
