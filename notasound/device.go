@@ -6,7 +6,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"time"
 
 	"github.com/ebitengine/oto/v3"
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
@@ -85,21 +84,10 @@ func load(path string, format AudioFormat) (*Sound, error) {
 	return &Sound{data: floatBytes}, nil
 }
 
-// play handles the lifecycle: creates player, plays, and closes when done.
-func play(ctx *oto.Context, s *Sound) {
-	go func() {
-		// Create a reader for this specific playback instance
-		r := bytes.NewReader(s.data)
-		player := ctx.NewPlayer(r)
-
-		player.Play()
-
-		// Wait until the sound is finished
-		for player.IsPlaying() {
-			// Tiny sleep to prevent CPU spiking while checking status
-			select {
-			case <-time.After(time.Millisecond * 10):
-			}
-		}
-	}()
+func play(ctx *oto.Context, s *Sound, volume float32) *oto.Player {
+	r := bytes.NewReader(s.data)
+	player := ctx.NewPlayer(r)
+	player.SetVolume(float64(volume))
+	player.Play()
+	return player
 }
