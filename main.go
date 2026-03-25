@@ -2,10 +2,13 @@ package main
 
 import (
 	"NotaborEngine/notacollision"
+	"NotaborEngine/notacolor"
 	"NotaborEngine/notacore"
+	"NotaborEngine/notaentity"
+	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
-	"NotaborEngine/notaobject"
 	"NotaborEngine/notasound"
+	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
 	"fmt"
 	"log"
@@ -22,7 +25,7 @@ func main() {
 	defer engine.Shutdown()
 
 	renderLoop := notacore.CreateRenderLoop(60)
-	logicLoop := notacore.CreateFixedHzLoop(150000)
+	logicLoop := notacore.CreateFixedHzLoop(3000)
 
 	engine.SetInputFrequency(3000)
 	engine.SoundManager.SetSoundsFolder("resources/sounds")
@@ -54,34 +57,34 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	rect := notaobject.CreateRectangle(0.5, 0.5)
-	sprite := &notaobject.Sprite{
+	rect := notageometry.CreateRectangle(0.5, 0.5)
+	sprite := &notatexture.Sprite{
 		Texture: texture,
 		Name:    "quadSprite",
 		Polygon: rect,
 	}
-	entity := notaobject.NewEntity("quad", "Test Quad").
+	entity := notaentity.NewEntity("quad", "Test Quad").
 		WithSprite(sprite).
-		WithCollider(notacollision.NewPolygonCollider(rect.Points()))
+		WithCollider(notacollision.NewPolygonCollider(rect.Points))
 
 	// Static walls
-	rect1 := notaobject.CreateRectangle(0.2, 2)
-	sprite1 := &notaobject.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
-	entity1 := notaobject.NewEntity("wall", "Test Wall").
+	rect1 := notageometry.CreateRectangle(0.2, 2)
+	sprite1 := &notatexture.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
+	entity1 := notaentity.NewEntity("wall", "Test Wall").
 		WithPolygon(rect1).
-		WithCollider(notacollision.NewPolygonCollider(rect1.Points())).
-		WithSprite(sprite1)
-	rect1.SetColor(notaobject.Green)
+		WithCollider(notacollision.NewPolygonCollider(rect1.Points)).
+		WithSprite(sprite1).
+		WithColor(notacolor.Green)
 	entity1.Move(notamath.Vec2{X: 1, Y: 0})
 
-	rect2 := notaobject.CreateRectangle(0.2, 2)
-	entity2 := notaobject.NewEntity("wall2", "Test Wall").
+	rect2 := notageometry.CreateRectangle(0.2, 2)
+	entity2 := notaentity.NewEntity("wall2", "Test Wall").
 		WithPolygon(rect2).
-		WithCollider(notacollision.NewPolygonCollider(rect2.Points()))
-	rect2.SetColor(notaobject.Red)
+		WithCollider(notacollision.NewPolygonCollider(rect2.Points)).
+		WithColor(notacolor.Red)
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
-	//add draw calls
+	// Add draw calls
 	renderLoop.Add(func() error { entity.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity1.Draw(win.RunTime.Renderer); return nil })
 	renderLoop.Add(func() error { entity2.Draw(win.RunTime.Renderer); return nil })

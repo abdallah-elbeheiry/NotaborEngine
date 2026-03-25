@@ -1,7 +1,8 @@
 package notacore
 
 import (
-	"NotaborEngine/notaobject"
+	"NotaborEngine/notarender"
+	"NotaborEngine/notatexture"
 	"errors"
 	"sync"
 	"time"
@@ -27,9 +28,9 @@ type WindowBaseRuntime struct {
 
 type windowRunTime struct {
 	WindowBaseRuntime
-	backend    *notaobject.GLBackend
-	Renderer   *notaobject.Renderer
-	TextureMgr *notaobject.TextureManager
+	backend    *notarender.GLBackend
+	Renderer   *notarender.Renderer
+	TextureMgr *notatexture.TextureManager
 }
 
 type Window struct {
@@ -101,9 +102,9 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 				lastRender: time.Now(),
 				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz.Get()),
 			},
-			backend:    &notaobject.GLBackend{},
-			Renderer:   &notaobject.Renderer{},
-			TextureMgr: notaobject.NewTextureManager(),
+			backend:    &notarender.GLBackend{},
+			Renderer:   &notarender.Renderer{},
+			TextureMgr: notatexture.NewTextureManager(),
 		},
 	}
 

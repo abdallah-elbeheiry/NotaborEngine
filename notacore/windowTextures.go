@@ -1,13 +1,13 @@
 package notacore
 
 import (
-	"NotaborEngine/notaobject"
+	"NotaborEngine/notatexture"
 	"fmt"
 	"path/filepath"
 )
 
 // LoadTexture loads a texture and creates OpenGL texture (with context)
-func (w *Window) LoadTexture(name, path string) (*notaobject.Texture, error) {
+func (w *Window) LoadTexture(name, path string) (*notatexture.Texture, error) {
 	w.MakeContextCurrent()
 
 	absPath, err := filepath.Abs(path)
@@ -24,7 +24,7 @@ func (w *Window) LoadTexture(name, path string) (*notaobject.Texture, error) {
 }
 
 // GetTexture retrieves a loaded texture
-func (w *Window) GetTexture(name string) (*notaobject.Texture, error) {
+func (w *Window) GetTexture(name string) (*notatexture.Texture, error) {
 	return w.RunTime.TextureMgr.Get(name)
 }
 

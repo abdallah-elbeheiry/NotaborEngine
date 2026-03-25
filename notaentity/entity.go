@@ -1,9 +1,15 @@
-package notaobject
+package notaentity
 
 import (
 	"NotaborEngine/notacollision"
+	"NotaborEngine/notacolor"
+	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
+	"NotaborEngine/notarender"
+	"NotaborEngine/notashader"
+	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
+	"fmt"
 )
 
 type Entity struct {
@@ -16,10 +22,13 @@ type Entity struct {
 	Visible   notatomic.Bool
 
 	// Components wrapped in atomic pointers
-	Sprite   notatomic.Pointer[Sprite]
-	Polygon  notatomic.Pointer[Polygon]
+	Sprite   notatomic.Pointer[notatexture.Sprite]
+	Polygon  notatomic.Pointer[notageometry.Polygon]
 	Collider notatomic.Pointer[notacollision.Collider]
-	Shader   notatomic.Pointer[Shader]
+	Shader   notatomic.Pointer[notashader.Shader]
+
+	// Rendering properties
+	Color notatomic.Pointer[notacolor.Color]
 }
 
 func NewEntity(id, name string) *Entity {
@@ -27,22 +36,25 @@ func NewEntity(id, name string) *Entity {
 		ID:   id,
 		Name: name,
 	}
-	// Initialize atomic states
 	e.Active.Set(true)
 	e.Visible.Set(true)
 	trans := notamath.NewTransform2D()
 	e.Transform.Set(&trans)
+
+	// Default color
+	defaultColor := notacolor.White
+	e.Color.Set(&defaultColor)
+
 	return e
 }
 
-// Builders (Thread-Safe)
-
-func (e *Entity) WithSprite(s *Sprite) *Entity {
+// Builder methods
+func (e *Entity) WithSprite(s *notatexture.Sprite) *Entity {
 	e.Sprite.Set(s)
 	return e
 }
 
-func (e *Entity) WithPolygon(p *Polygon) *Entity {
+func (e *Entity) WithPolygon(p *notageometry.Polygon) *Entity {
 	e.Polygon.Set(p)
 	return e
 }
@@ -52,13 +64,17 @@ func (e *Entity) WithCollider(c notacollision.Collider) *Entity {
 	return e
 }
 
-func (e *Entity) WithShader(s *Shader) *Entity {
+func (e *Entity) WithShader(s *notashader.Shader) *Entity {
 	e.Shader.Set(s)
 	return e
 }
 
-// Logic
+func (e *Entity) WithColor(c notacolor.Color) *Entity {
+	e.Color.Set(&c)
+	return e
+}
 
+// Movement methods
 func (e *Entity) Move(delta notamath.Vec2) {
 	if !e.Active.Get() {
 		return
@@ -66,11 +82,9 @@ func (e *Entity) Move(delta notamath.Vec2) {
 
 	for {
 		oldT := e.Transform.Get()
-		// Create a local copy to modify
 		newT := *oldT
 		newT.TranslateBy(delta)
 
-		// Only swap if no other thread changed the transform in the meantime
 		if e.Transform.CompareAndSwap(oldT, &newT) {
 			e.updateCollider(&newT)
 			break
@@ -102,35 +116,46 @@ func (e *Entity) updateCollider(t *notamath.Transform2D) {
 	}
 }
 
-func (e *Entity) Draw(renderer *Renderer) {
-	// Cache active/visible status once
-	active := e.Active.Get()
-	visible := e.Visible.Get()
-
-	if !visible || !active {
+// Draw submits rendering commands to the renderer
+func (e *Entity) Draw(renderer *notarender.Renderer) {
+	if !e.Visible.Get() || !e.Active.Get() {
 		return
 	}
 
-	// Capture the current pointers
 	shader := e.Shader.Get()
 	if shader == nil {
-		newShader, _ := NewShader("notaobject/shaders/basic.vert", "notaobject/shaders/basic.frag")
-		e.Shader.CompareAndSwap(nil, newShader)
-		shader = e.Shader.Get()
+		shader = renderer.DefaultShader
+		if shader == nil {
+			newShader, err := notashader.NewShader("notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
+			if err != nil {
+				return
+			}
+			shader = newShader
+			e.Shader.Set(shader)
+		}
 	}
 
-	// Capture the transform snapshot
+	// Get transform
 	t := e.Transform.Get()
 	model := t.Matrix()
 
-	if poly := e.Polygon.Get(); poly != nil {
-		renderer.Submit(poly, model, nil, shader)
+	// Get color
+	color := e.Color.Get()
+	if color == nil {
+		color = &notacolor.White
 	}
 
-	if sprite := e.Sprite.Get(); sprite != nil {
-		if sprite.Polygon != nil {
-			renderer.Submit(sprite.Polygon, model, sprite.Texture, shader)
-		}
+	// Render sprite if present
+	if sprite := e.Sprite.Get(); sprite != nil && sprite.Polygon != nil {
+		renderer.SubmitPolygon(sprite.Polygon, model, *color, sprite.Texture, shader)
+		return
+	}
+
+	// Otherwise render polygon directly
+	if poly := e.Polygon.Get(); poly != nil {
+		renderer.SubmitPolygon(poly, model, *color, nil, shader)
+	} else {
+		fmt.Printf("Entity %s: has no polygon or sprite!\n", e.Name)
 	}
 }
 

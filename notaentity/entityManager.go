@@ -1,4 +1,4 @@
-package notaobject
+package notaentity
 
 import (
 	"NotaborEngine/notatomic"

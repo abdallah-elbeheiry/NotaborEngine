@@ -1,4 +1,4 @@
-package notaobject
+package notatexture
 
 import (
 	"fmt"

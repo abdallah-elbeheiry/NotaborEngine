@@ -1,13 +1,14 @@
-package notaobject
+package notatexture
 
 import (
+	"NotaborEngine/notageometry"
 	"fmt"
 	"sync"
 )
 
 type Sprite struct {
 	Name    string
-	Polygon *Polygon
+	Polygon *notageometry.Polygon
 	Texture *Texture
 }
 

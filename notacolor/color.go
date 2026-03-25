@@ -1,4 +1,4 @@
-package notaobject
+package notacolor
 
 import (
 	"fmt"
