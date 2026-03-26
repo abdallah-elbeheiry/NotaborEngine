@@ -118,6 +118,7 @@ func (e *Entity) updateCollider(t *notamath.Transform2D) {
 
 // Draw submits rendering commands to the renderer
 func (e *Entity) Draw(window *notacore.Window, loop *notacore.Loop) error {
+	e.snapShot()
 	if !e.Visible.Get() || !e.Active.Get() {
 		return nil
 	}
@@ -174,7 +175,7 @@ func (e *Entity) CollidesWith(other *Entity) bool {
 	return notacollision.Intersects(*c1, *c2)
 }
 
-func (e *Entity) SnapShot() {
+func (e *Entity) snapShot() {
 	t := e.Transform.Get()
 	t.Snapshot()
 }

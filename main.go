@@ -94,9 +94,6 @@ func main() {
 
 	// Add draw calls
 	drawingLoop.Add(func() error {
-		entity.SnapShot()
-		entity1.SnapShot()
-		entity2.SnapShot()
 		err := entity.Draw(win, logicLoop)
 		err = entity1.Draw(win, logicLoop)
 		err = entity2.Draw(win, logicLoop)
