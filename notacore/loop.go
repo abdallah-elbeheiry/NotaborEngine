@@ -8,8 +8,6 @@ import (
 	"runtime"
 	"sync"
 	"time"
-
-	"github.com/go-gl/gl/v4.6-core/gl"
 )
 
 type Runnable func() error
@@ -28,7 +26,7 @@ var jobPool = sync.Pool{
 	},
 }
 
-type FixedHzLoop struct {
+type Loop struct {
 	Hz           notatomic.Float32
 	monitorEvery notatomic.Int64 // Store as time.Duration (int64)
 	lastMonitor  notatomic.Pointer[time.Time]
@@ -49,20 +47,14 @@ type FixedHzLoop struct {
 	numWorkers int
 }
 
-type RenderLoop struct {
-	MaxHz     notatomic.Float32
-	Runnables notatomic.Pointer[[]Runnable]
-	LastTime  notatomic.Pointer[time.Time]
-}
-
-func (l *FixedHzLoop) EnableMonitor(interval time.Duration) {
+func (l *Loop) EnableMonitor(interval time.Duration) {
 	l.monitorEvery.Set(int64(interval))
 	now := time.Now()
 	l.lastMonitor.Set(&now)
 	l.tickCount.Set(0)
 }
 
-func (l *FixedHzLoop) Start() {
+func (l *Loop) Start() {
 	if l.stop != nil {
 		return
 	}
@@ -88,7 +80,7 @@ func (l *FixedHzLoop) Start() {
 	go l.runLoop()
 }
 
-func (l *FixedHzLoop) startWorkers() {
+func (l *Loop) startWorkers() {
 	l.taskQueue = make(chan *job, l.numWorkers*4)
 	l.workerDone = make(chan struct{})
 
@@ -98,7 +90,7 @@ func (l *FixedHzLoop) startWorkers() {
 	}
 }
 
-func (l *FixedHzLoop) worker() {
+func (l *Loop) worker() {
 	defer l.workerWg.Done()
 	for {
 		select {
@@ -114,7 +106,7 @@ func (l *FixedHzLoop) worker() {
 	}
 }
 
-func (l *FixedHzLoop) Stop() {
+func (l *Loop) Stop() {
 	if l.stop == nil {
 		return
 	}
@@ -130,7 +122,7 @@ func (l *FixedHzLoop) Stop() {
 	l.workerWg.Wait()
 }
 
-func (l *FixedHzLoop) Add(r Runnable) {
+func (l *Loop) Add(r Runnable) {
 	const minCap = 32
 
 	for {
@@ -158,7 +150,7 @@ func (l *FixedHzLoop) Add(r Runnable) {
 	}
 }
 
-func (l *FixedHzLoop) Remove(r Runnable) {
+func (l *Loop) Remove(r Runnable) {
 	targetPtr := reflect.ValueOf(r).Pointer()
 	for {
 		oldPtr := l.Runnables.Get()
@@ -186,7 +178,7 @@ func (l *FixedHzLoop) Remove(r Runnable) {
 	}
 }
 
-func (l *FixedHzLoop) Alpha(now time.Time) float32 {
+func (l *Loop) Alpha(now time.Time) float32 {
 	last := l.lastTick.Get()
 	delta := time.Duration(l.delta.Get())
 
@@ -204,7 +196,7 @@ func (l *FixedHzLoop) Alpha(now time.Time) float32 {
 	return alpha
 }
 
-func (l *FixedHzLoop) runLoop() {
+func (l *Loop) runLoop() {
 	defer l.wg.Done()
 
 	hz := l.Hz.Get()
@@ -252,7 +244,7 @@ func (l *FixedHzLoop) runLoop() {
 	}
 }
 
-func (l *FixedHzLoop) mergeBack(runnables []Runnable) {
+func (l *Loop) mergeBack(runnables []Runnable) {
 	if len(runnables) == 0 {
 		return
 	}
@@ -284,14 +276,14 @@ func (l *FixedHzLoop) mergeBack(runnables []Runnable) {
 	}
 }
 
-func (l *FixedHzLoop) waitUntil(nextTick time.Time) {
+func (l *Loop) waitUntil(nextTick time.Time) {
 	remaining := time.Until(nextTick)
 	if remaining > 0 {
 		time.Sleep(remaining)
 	}
 }
 
-func (l *FixedHzLoop) runRunnablesParallel(runnables []Runnable) []Runnable {
+func (l *Loop) runRunnablesParallel(runnables []Runnable) []Runnable {
 	count := len(runnables)
 	if count == 0 {
 		return runnables[:0]
@@ -345,70 +337,14 @@ func (l *FixedHzLoop) runRunnablesParallel(runnables []Runnable) []Runnable {
 	return runnables[:newIdx]
 }
 
-func (r *RenderLoop) Render() {
-	now := time.Now()
-	r.LastTime.Set(&now)
-
-	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-	runnablesPtr := r.Runnables.Get()
-	if runnablesPtr != nil {
-		for _, runnable := range *runnablesPtr {
-			if err := runnable(); err != nil {
-				fmt.Println("Render error:", err)
-			}
-		}
-	}
-}
-
-func (r *RenderLoop) Add(runnable Runnable) {
-	const minCap = 32
-
-	for {
-		oldPtr := r.Runnables.Get()
-		var old []Runnable
-		if oldPtr != nil {
-			old = *oldPtr
-		}
-
-		newLen := len(old) + 1
-		var newCap int
-		if newLen < minCap {
-			newCap = minCap
-		} else {
-			newCap = newLen * 2
-		}
-
-		newSlice := make([]Runnable, newLen, newCap)
-		copy(newSlice, old)
-		newSlice[len(old)] = runnable
-
-		if r.Runnables.CompareAndSwap(oldPtr, &newSlice) {
-			return
-		}
-	}
-}
-
-func CreateFixedHzLoop(Hz float32) *FixedHzLoop {
-	loop := &FixedHzLoop{}
+func CreateLoop(Hz float32) *Loop {
+	loop := &Loop{}
 	loop.Hz.Set(Hz)
 	next := make([]Runnable, 0)
 	loop.Runnables.Set(&next)
 	now := time.Now()
 	loop.lastTick.Set(&now)
 	loop.lastMonitor.Set(&now)
-
-	return loop
-}
-
-func CreateRenderLoop(Hz float32) *RenderLoop {
-	loop := &RenderLoop{}
-	loop.MaxHz.Set(Hz)
-	r := make([]Runnable, 0)
-	loop.Runnables.Set(&r)
-	now := time.Now()
-	loop.LastTime.Set(&now)
 
 	return loop
 }

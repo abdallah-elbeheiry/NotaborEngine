@@ -415,7 +415,7 @@ type InputManager struct {
 	active map[Input]bool // latest captured GLFW state
 }
 
-// UpdateSignals should be called once per logic tick (FixedHzLoop).
+// UpdateSignals should be called once per logic tick (Loop).
 // It snapshots last state and applies the latest captured state.
 func (im *InputManager) UpdateSignals() {
 	im.mu.RLock()

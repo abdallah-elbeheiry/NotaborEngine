@@ -9,26 +9,24 @@ import (
 	"NotaborEngine/notashader"
 	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
-	"fmt"
 )
 
 type Entity struct {
 	ID   string
 	Name string
 
-	// Use your atomic wrappers instead of primitives
 	Transform notatomic.Pointer[notamath.Transform2D]
 	Active    notatomic.Bool
 	Visible   notatomic.Bool
 
-	// Components wrapped in atomic pointers
 	Sprite   notatomic.Pointer[notatexture.Sprite]
 	Polygon  notatomic.Pointer[notageometry.Polygon]
 	Collider notatomic.Pointer[notacollision.Collider]
 	Shader   notatomic.Pointer[notashader.Shader]
 
-	// Rendering properties
 	Color notatomic.Pointer[notacolor.Color]
+
+	lastSubmittedFrame notatomic.UInt64
 }
 
 func NewEntity(id, name string) *Entity {
@@ -118,44 +116,45 @@ func (e *Entity) updateCollider(t *notamath.Transform2D) {
 
 // Draw submits rendering commands to the renderer
 func (e *Entity) Draw(renderer *notarender.Renderer) {
+
 	if !e.Visible.Get() || !e.Active.Get() {
 		return
 	}
 
-	shader := e.Shader.Get()
-	if shader == nil {
-		shader = renderer.DefaultShader
-		if shader == nil {
-			newShader, err := notashader.NewShader("notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
-			if err != nil {
-				return
-			}
-			shader = newShader
-			e.Shader.Set(shader)
+	frame := renderer.FrameID.Get()
+
+	for {
+		last := e.lastSubmittedFrame.Get()
+
+		if last == frame {
+			return // already submitted this frame
+		}
+
+		if e.lastSubmittedFrame.CompareAndSwap(last, frame) {
+			break
 		}
 	}
 
-	// Get transform
+	shader := e.Shader.Get()
+	if shader == nil {
+		panic("entity has no shader")
+	}
+
 	t := e.Transform.Get()
 	model := t.Matrix()
 
-	// Get color
 	color := e.Color.Get()
 	if color == nil {
 		color = &notacolor.White
 	}
 
-	// Render sprite if present
 	if sprite := e.Sprite.Get(); sprite != nil && sprite.Polygon != nil {
 		renderer.SubmitPolygon(sprite.Polygon, model, *color, sprite.Texture, shader)
 		return
 	}
 
-	// Otherwise render polygon directly
 	if poly := e.Polygon.Get(); poly != nil {
 		renderer.SubmitPolygon(poly, model, *color, nil, shader)
-	} else {
-		fmt.Printf("Entity %s: has no polygon or sprite!\n", e.Name)
 	}
 }
 
