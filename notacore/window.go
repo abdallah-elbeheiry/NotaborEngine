@@ -18,8 +18,8 @@ type WindowConfig struct {
 	Resizable bool
 	Type      WindowType
 
-	LogicLoops []*Loop
-	RefreshHz  float32
+	Loops     []*Loop
+	TargetFPS float32
 }
 
 type WindowBaseRuntime struct {
@@ -95,7 +95,7 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 		return nil, err
 	}
 
-	hz := cfg.RefreshHz
+	hz := cfg.TargetFPS
 	if hz <= 0 {
 		hz = 60
 	}

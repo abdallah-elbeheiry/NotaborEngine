@@ -25,7 +25,8 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	logicLoop := notacore.CreateLoop(10000)
+	logicLoop := notacore.CreateLoop(3000)
+	drawingLoop := notacore.CreateLoop(1000)
 
 	engine.SetInputFrequency(3000)
 	engine.SoundManager.SetSoundsFolder("resources/sounds")
@@ -35,15 +36,15 @@ func main() {
 
 	// START OF WINDOW CREATION
 	cfg := notacore.WindowConfig{
-		X:          50,
-		Y:          50,
-		W:          800,
-		H:          600,
-		Title:      "Entity Test",
-		Type:       notacore.Windowed,
-		Resizable:  true,
-		RefreshHz:  300,
-		LogicLoops: []*notacore.Loop{logicLoop},
+		X:         50,
+		Y:         50,
+		W:         800,
+		H:         600,
+		Title:     "Entity Test",
+		Type:      notacore.Windowed,
+		Resizable: true,
+		TargetFPS: 60,
+		Loops:     []*notacore.Loop{logicLoop, drawingLoop},
 	}
 
 	win, err := engine.CreateWindow(cfg)
@@ -92,10 +93,16 @@ func main() {
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
 	// Add draw calls
-	logicLoop.Add(func() error {
-		entity.Draw(win.RunTime.Renderer)
-		entity1.Draw(win.RunTime.Renderer)
-		entity2.Draw(win.RunTime.Renderer)
+	drawingLoop.Add(func() error {
+		entity.SnapShot()
+		entity1.SnapShot()
+		entity2.SnapShot()
+		err := entity.Draw(win, logicLoop)
+		err = entity1.Draw(win, logicLoop)
+		err = entity2.Draw(win, logicLoop)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	// END OF ENTITY CREATION
@@ -145,7 +152,7 @@ func main() {
 	})
 	val := 1.0
 	logicLoop.Add(func() error {
-		entity.Move(notamath.Vec2{X: float32(0.000 * val), Y: 0})
+		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
 			err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
 			if err != nil {

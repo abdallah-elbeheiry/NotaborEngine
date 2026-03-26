@@ -3,12 +3,14 @@ package notaentity
 import (
 	"NotaborEngine/notacollision"
 	"NotaborEngine/notacolor"
+	"NotaborEngine/notacore"
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
-	"NotaborEngine/notarender"
 	"NotaborEngine/notashader"
 	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
+	"errors"
+	"time"
 )
 
 type Entity struct {
@@ -115,21 +117,19 @@ func (e *Entity) updateCollider(t *notamath.Transform2D) {
 }
 
 // Draw submits rendering commands to the renderer
-func (e *Entity) Draw(renderer *notarender.Renderer) {
-
+func (e *Entity) Draw(window *notacore.Window, loop *notacore.Loop) error {
 	if !e.Visible.Get() || !e.Active.Get() {
-		return
+		return nil
 	}
 
+	renderer := window.RunTime.Renderer
 	frame := renderer.FrameID.Get()
 
 	for {
 		last := e.lastSubmittedFrame.Get()
-
 		if last == frame {
-			return // already submitted this frame
+			return nil
 		}
-
 		if e.lastSubmittedFrame.CompareAndSwap(last, frame) {
 			break
 		}
@@ -137,11 +137,16 @@ func (e *Entity) Draw(renderer *notarender.Renderer) {
 
 	shader := e.Shader.Get()
 	if shader == nil {
-		panic("entity has no shader")
+		return errors.New("Entity with ID " + e.ID + " has no shader")
+	}
+
+	alpha := loop.Alpha(time.Now())
+	if alpha > 1 {
+		alpha = 1
 	}
 
 	t := e.Transform.Get()
-	model := t.Matrix()
+	model := t.InterpolatedMatrix(alpha)
 
 	color := e.Color.Get()
 	if color == nil {
@@ -150,12 +155,13 @@ func (e *Entity) Draw(renderer *notarender.Renderer) {
 
 	if sprite := e.Sprite.Get(); sprite != nil && sprite.Polygon != nil {
 		renderer.SubmitPolygon(sprite.Polygon, model, *color, sprite.Texture, shader)
-		return
+		return nil
 	}
 
 	if poly := e.Polygon.Get(); poly != nil {
 		renderer.SubmitPolygon(poly, model, *color, nil, shader)
 	}
+	return nil
 }
 
 func (e *Entity) CollidesWith(other *Entity) bool {
@@ -166,4 +172,9 @@ func (e *Entity) CollidesWith(other *Entity) bool {
 		return false
 	}
 	return notacollision.Intersects(*c1, *c2)
+}
+
+func (e *Entity) SnapShot() {
+	t := e.Transform.Get()
+	t.Snapshot()
 }
