@@ -13,7 +13,7 @@ import (
 )
 
 type Settings struct {
-	Vsync      bool    //Locks FPS to monitor's refresh rate
+	Vsync      bool    //Locks TargetFPS to monitor's refresh rate
 	Muted      bool    //Completely disables sound
 	SoundLevel float32 //Volume of sound (1 = 100%)
 }
@@ -38,7 +38,7 @@ func (e *Engine) Run() error {
 	// Start all logic loops
 	for _, w := range e.Windows {
 		cfg := w.GetConfig()
-		for _, loop := range cfg.LogicLoops {
+		for _, loop := range cfg.Loops {
 			loop.Start()
 		}
 		w.GetRuntime().lastRender = time.Now()
@@ -74,7 +74,7 @@ func (e *Engine) Run() error {
 
 	// Stop logic loops
 	for _, w := range e.Windows {
-		for _, loop := range w.GetConfig().LogicLoops {
+		for _, loop := range w.GetConfig().Loops {
 			loop.Stop()
 		}
 	}

@@ -475,3 +475,15 @@ func FinishAfter(fn Runnable, d time.Duration) Runnable {
 		return ErrDone
 	}
 }
+
+func (l *Loop) LastTickTime() time.Time {
+	last := l.lastTick.Get()
+	if last == nil {
+		return time.Now()
+	}
+	return *last
+}
+
+func (l *Loop) TickDelta() time.Duration {
+	return time.Duration(l.delta.Get())
+}
