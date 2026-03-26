@@ -25,7 +25,7 @@ type Engine struct {
 	SoundManager  *notasound.SoundManager
 
 	settings  *Settings
-	inputLoop *FixedHzLoop
+	inputLoop *Loop
 	running   bool
 }
 
@@ -61,6 +61,7 @@ func (e *Engine) Run() error {
 			rt := win.GetRuntime()
 			elapsed := now.Sub(rt.lastRender)
 			if elapsed < rt.targetDt {
+				time.Sleep(rt.targetDt - elapsed)
 				continue
 			}
 			rt.lastRender = now
@@ -81,7 +82,7 @@ func (e *Engine) Run() error {
 }
 
 func (e *Engine) SetInputFrequency(Hz float32) {
-	e.inputLoop = CreateFixedHzLoop(Hz)
+	e.inputLoop = CreateLoop(Hz)
 	e.inputLoop.Add(func() error {
 		if e.InputManager == nil {
 			return errors.New("InputManager is not initialized, initialize it first")

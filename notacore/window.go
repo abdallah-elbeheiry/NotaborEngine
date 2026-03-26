@@ -12,13 +12,14 @@ import (
 )
 
 type WindowConfig struct {
-	X, Y       int
-	W, H       int
-	Title      string
-	Resizable  bool
-	Type       WindowType
-	LogicLoops []*FixedHzLoop
-	RenderLoop *RenderLoop
+	X, Y      int
+	W, H      int
+	Title     string
+	Resizable bool
+	Type      WindowType
+
+	LogicLoops []*Loop
+	RefreshHz  float32
 }
 
 type WindowBaseRuntime struct {
@@ -43,8 +44,9 @@ type Window struct {
 func (w *Window) GetConfig() *WindowConfig       { return &w.Config }
 func (w *Window) GetRuntime() *WindowBaseRuntime { return &w.RunTime.WindowBaseRuntime }
 func (w *Window) RunRenderer() {
-	w.RunTime.Renderer.Orders = w.RunTime.Renderer.Orders[:0]
-	w.Config.RenderLoop.Render()
+	rt := &w.RunTime.WindowBaseRuntime
+	rt.lastRender = time.Now()
+	w.RunTime.Renderer.FrameID.Inc()
 	w.RunTime.Renderer.Flush(w.RunTime.backend)
 }
 func (w *Window) GLFW() *glfw.Window { return w.Handle }
@@ -93,6 +95,13 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 		return nil, err
 	}
 
+	hz := cfg.RefreshHz
+	if hz <= 0 {
+		hz = 60
+	}
+
+	targetDt := time.Duration(float64(time.Second) / float64(hz))
+
 	win := &Window{
 		ID:     wm.nextID,
 		Handle: handle,
@@ -100,7 +109,7 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 		RunTime: windowRunTime{
 			WindowBaseRuntime: WindowBaseRuntime{
 				lastRender: time.Now(),
-				targetDt:   time.Second / time.Duration(cfg.RenderLoop.MaxHz.Get()),
+				targetDt:   targetDt,
 			},
 			backend:    &notarender.GLBackend{},
 			Renderer:   &notarender.Renderer{},

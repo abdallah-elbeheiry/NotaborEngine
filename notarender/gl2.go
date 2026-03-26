@@ -6,6 +6,7 @@ import (
 	"NotaborEngine/notamath"
 	"NotaborEngine/notashader"
 	"NotaborEngine/notatexture"
+	"NotaborEngine/notatomic"
 	"unsafe"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
@@ -13,6 +14,8 @@ import (
 
 type Renderer struct {
 	Orders []DrawOrder
+
+	FrameID notatomic.UInt64
 
 	currentShader  *notashader.Shader
 	currentTexture *notatexture.Texture
