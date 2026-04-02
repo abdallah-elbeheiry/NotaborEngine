@@ -4,7 +4,6 @@ import (
 	"NotaborEngine/notatomic"
 	"errors"
 	"fmt"
-	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -19,9 +18,7 @@ type job struct {
 }
 
 var jobPool = sync.Pool{
-	New: func() any {
-		return &job{}
-	},
+	New: func() any { return &job{} },
 }
 
 type Loop struct {
@@ -39,6 +36,9 @@ type Loop struct {
 	wg         sync.WaitGroup
 	workerWg   sync.WaitGroup
 	numWorkers int
+
+	// Reusable slice buffer to avoid allocating each tick
+	taskBuffer []*Task
 }
 
 // Start initializes the loop and workers
@@ -49,7 +49,7 @@ func (l *Loop) Start() {
 	l.stop = make(chan struct{})
 
 	if l.Tasks.Get() == nil {
-		tasks := make([]*Task, 0)
+		tasks := make([]*Task, 0, 32)
 		l.Tasks.Set(&tasks)
 	}
 
@@ -69,7 +69,7 @@ func (l *Loop) Start() {
 }
 
 func (l *Loop) startWorkers() {
-	l.taskQueue = make(chan *job, l.numWorkers*4)
+	l.taskQueue = make(chan *job, 256) // large buffer to reduce blocking
 	l.workerDone = make(chan struct{})
 
 	for i := 0; i < l.numWorkers; i++ {
@@ -94,18 +94,17 @@ func (l *Loop) worker() {
 	}
 }
 
+// Stop halts the loop and all workers
 func (l *Loop) Stop() {
 	if l.stop == nil {
 		return
 	}
-
 	select {
 	case <-l.stop:
 		return
 	default:
 		close(l.stop)
 	}
-
 	l.wg.Wait()
 	close(l.workerDone)
 	l.workerWg.Wait()
@@ -116,17 +115,15 @@ func (l *Loop) Add(t *Task) {
 	const minCap = 32
 	for {
 		oldPtr := l.Tasks.Get()
-		var old []*Task
+		old := [](*Task){}
 		if oldPtr != nil {
 			old = *oldPtr
 		}
 
 		newLen := len(old) + 1
-		var newCap int
-		if len(old) < minCap {
+		newCap := newLen * 2
+		if newLen < minCap {
 			newCap = minCap
-		} else {
-			newCap = len(old) * 2
 		}
 
 		newSlice := make([]*Task, newLen, newCap)
@@ -139,38 +136,32 @@ func (l *Loop) Add(t *Task) {
 	}
 }
 
-// Remove a task from the loop
+// Remove a task from the loop (pointer comparison, no reflection)
 func (l *Loop) Remove(t *Task) {
-	targetPtr := reflect.ValueOf(t).Pointer()
 	for {
 		oldPtr := l.Tasks.Get()
 		oldSlice := *oldPtr
-
-		foundIdx := -1
+		found := -1
 		for i, existing := range oldSlice {
-			if reflect.ValueOf(existing).Pointer() == targetPtr {
-				foundIdx = i
+			if existing == t { // direct pointer comparison
+				found = i
 				break
 			}
 		}
-
-		if foundIdx == -1 {
+		if found == -1 {
 			return
 		}
 
-		newSlice := append([]*Task{}, oldSlice[:foundIdx]...)
-		newSlice = append(newSlice, oldSlice[foundIdx+1:]...)
-
+		newSlice := append(oldSlice[:found:found], oldSlice[found+1:]...)
 		if l.Tasks.CompareAndSwap(oldPtr, &newSlice) {
 			return
 		}
 	}
 }
 
-// runLoop executes tasks each tick
+// runLoop executes tasks per tick
 func (l *Loop) runLoop() {
 	defer l.wg.Done()
-
 	hz := l.Hz.Get()
 	if hz <= 0 {
 		hz = 60
@@ -187,67 +178,61 @@ func (l *Loop) runLoop() {
 		}
 
 		l.waitUntil(nextTick)
-		l.lastTick.Set(&nextTick)
+		now := time.Now()
+		l.lastTick.Set(&now)
 
 		ptrTasks := l.Tasks.Get()
 		if ptrTasks != nil {
-			tasksToRun := *ptrTasks
-			empty := make([]*Task, 0)
-			l.Tasks.Set(&empty)
+			tasks := *ptrTasks
+			if len(l.taskBuffer) < len(tasks) {
+				l.taskBuffer = make([]*Task, len(tasks))
+			} else {
+				l.taskBuffer = l.taskBuffer[:len(tasks)]
+			}
+			copy(l.taskBuffer, tasks)
 
-			if len(tasksToRun) > 0 {
-				remaining := l.runTasksParallel(tasksToRun)
+			// Clear the shared pointer quickly
+			empty := (*[]*Task)(nil)
+			l.Tasks.Set(empty)
+
+			if len(l.taskBuffer) > 0 {
+				remaining := l.runTasksParallel(l.taskBuffer)
 				l.mergeBack(remaining)
 			}
 		}
 
 		l.tickCount.Add(1)
-
-		// Update interval in case Hz changed
 		newHz := l.Hz.Get()
-		if newHz != hz && newHz > 0 {
+		if newHz > 0 && newHz != hz {
 			hz = newHz
 			interval = time.Duration(float64(time.Second) / float64(hz))
 			l.delta.Set(int64(interval))
 		}
-
 		nextTick = nextTick.Add(interval)
 	}
 }
 
-// mergeBack merges remaining tasks into the loop buffer
+// mergeBack efficiently reuses slices
 func (l *Loop) mergeBack(tasks []*Task) {
 	if len(tasks) == 0 {
 		return
 	}
-
-	const minCap = 32
 	for {
 		oldPtr := l.Tasks.Get()
 		var old []*Task
 		if oldPtr != nil {
 			old = *oldPtr
 		}
-
-		newLen := len(old) + len(tasks)
-		var newCap int
-		if newLen < minCap {
-			newCap = minCap
-		} else {
-			newCap = newLen * 2
-		}
-
-		newSlice := make([]*Task, newLen, newCap)
+		newSlice := make([]*Task, len(old)+len(tasks))
 		copy(newSlice, old)
 		copy(newSlice[len(old):], tasks)
-
 		if l.Tasks.CompareAndSwap(oldPtr, &newSlice) {
 			return
 		}
 	}
 }
 
-// runTasksParallel executes tasks via workers and returns active tasks
+// runTasksParallel executes tasks via workers and returns remaining
 func (l *Loop) runTasksParallel(tasks []*Task) []*Task {
 	count := len(tasks)
 	if count == 0 {
@@ -256,68 +241,60 @@ func (l *Loop) runTasksParallel(tasks []*Task) []*Task {
 
 	results := make([]error, count)
 	var tickWg sync.WaitGroup
-	jobsUsed := make([]*job, 0, count)
+	tickWg.Add(count)
 
 	for i, t := range tasks {
-		tickWg.Add(1)
 		j := jobPool.Get().(*job)
 		j.task = t
 		j.err = &results[i]
 		j.wg = &tickWg
-		jobsUsed = append(jobsUsed, j)
 		l.taskQueue <- j
 	}
 
 	tickWg.Wait()
 
-	for _, j := range jobsUsed {
-		j.task = nil
-		j.err = nil
-		j.wg = nil
-		jobPool.Put(j)
+	for i, _ := range tasks {
+		if results[i] != nil && !errors.Is(results[i], ErrDone) {
+			fmt.Println("Task error:", results[i])
+		}
 	}
 
+	// Keep only active tasks
 	newIdx := 0
 	for i := 0; i < count; i++ {
-		err := results[i]
-		if err == nil {
+		if results[i] == nil {
 			tasks[newIdx] = tasks[i]
 			newIdx++
-			continue
 		}
-		if errors.Is(err, ErrDone) {
-			continue // remove silently
-		}
-		fmt.Println("Task error:", err)
+	}
+	tasks = tasks[:newIdx]
+
+	// Reset jobs
+	for i := 0; i < count; i++ {
+		jobPool.Put(&job{})
 	}
 
-	for i := newIdx; i < count; i++ {
-		tasks[i] = nil
-	}
-
-	return tasks[:newIdx]
+	return tasks
 }
 
-// waitUntil sleeps until the given tick
+// waitUntil sleeps until next tick
 func (l *Loop) waitUntil(nextTick time.Time) {
-	remaining := time.Until(nextTick)
-	if remaining > 0 {
+	if remaining := time.Until(nextTick); remaining > 0 {
 		time.Sleep(remaining)
 	}
 }
 
 // CreateLoop returns a new Loop instance
 func CreateLoop(Hz float32) *Loop {
-	loop := &Loop{}
-	loop.Hz.Set(Hz)
-	tasks := make([]*Task, 0)
-	loop.Tasks.Set(&tasks)
+	l := &Loop{}
+	l.Hz.Set(Hz)
+	l.Tasks.Set(&[]*Task{})
 	now := time.Now()
-	loop.lastTick.Set(&now)
-	return loop
+	l.lastTick.Set(&now)
+	return l
 }
 
-// Alpha returns a value in [0,1] representing how far we are through the current tick
+// Alpha returns progress through current tick
 func (l *Loop) Alpha(now time.Time) float32 {
 	last := l.lastTick.Get()
 	delta := time.Duration(l.delta.Get())

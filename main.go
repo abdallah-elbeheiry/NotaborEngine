@@ -25,7 +25,7 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	logicLoop := notatask.CreateLoop(1000)
+	logicLoop := notatask.CreateLoop(100000)
 	drawingLoop := notatask.CreateLoop(120)
 
 	engine.SetInputFrequency(3000)
@@ -167,16 +167,21 @@ func main() {
 		return nil
 	}
 
-	printLoopSpeed := func() error {
-		fmt.Printf("Average Hz: %d\n", i.Get()/10)
-		return nil
-	}
+	lastTs := time.Now()
 
-	incrementTask := notatask.CreateTask(incrementCounter, notatask.FinishAfter(time.Second*10))
-	printLoopTask := notatask.CreateTask(printLoopSpeed, notatask.WithDelay(time.Second*11), notatask.RunOnce())
+	incrementTask := notatask.CreateTask(incrementCounter)
+	printLoopTask := notatask.CreateTask(func() error {
+		now := time.Now()
+		delta := now.Sub(lastTs).Seconds()
+		count := i.Get()
+		freq := float64(count) / delta
+		fmt.Printf("Logic loop frequency: %.2f Hz\n", freq)
+		i.Set(0)
+		lastTs = now
+		return nil
+	}, notatask.RepeatEvery(time.Second*2))
 
 	logicLoop.Add(incrementTask)
-
 	logicLoop.Add(printLoopTask)
 	// END OF GAME LOGIC
 
