@@ -2,6 +2,7 @@ package notacore
 
 import (
 	"NotaborEngine/notasound"
+	"NotaborEngine/notatask"
 	"errors"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ type Engine struct {
 	SoundManager  *notasound.SoundManager
 
 	settings  *Settings
-	inputLoop *Loop
+	inputLoop *notatask.Loop
 	running   bool
 }
 
@@ -82,14 +83,15 @@ func (e *Engine) Run() error {
 }
 
 func (e *Engine) SetInputFrequency(Hz float32) {
-	e.inputLoop = CreateLoop(Hz)
-	e.inputLoop.Add(func() error {
+	e.inputLoop = notatask.CreateLoop(Hz)
+	e.InputManager.loop = e.inputLoop
+	e.inputLoop.Add(notatask.CreateTask(func() error {
 		if e.InputManager == nil {
 			return errors.New("InputManager is not initialized, initialize it first")
 		}
 		e.InputManager.Tick()
 		return nil
-	})
+	}))
 }
 
 func (e *Engine) AllWindowsClosed() bool {

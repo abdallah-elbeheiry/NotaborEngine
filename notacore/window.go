@@ -2,6 +2,7 @@ package notacore
 
 import (
 	"NotaborEngine/notarender"
+	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
 	"errors"
 	"sync"
@@ -18,7 +19,7 @@ type WindowConfig struct {
 	Resizable bool
 	Type      WindowType
 
-	Loops     []*Loop
+	Loops     []*notatask.Loop
 	TargetFPS float32
 }
 

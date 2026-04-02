@@ -1,6 +1,7 @@
 package notacore
 
 import (
+	"NotaborEngine/notatask"
 	"sync"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -413,6 +414,7 @@ type InputManager struct {
 
 	mu     sync.RWMutex
 	active map[Input]bool // latest captured GLFW state
+	loop   *notatask.Loop
 }
 
 // UpdateSignals should be called once per logic tick (Loop).
@@ -517,14 +519,6 @@ func (im *InputManager) BindInput(input Input, sig *InputSignal) {
 	}
 }
 
-func NewInputManager() *InputManager {
-	return &InputManager{
-		inputToSignal:  make(map[Input][]*InputSignal),
-		signalToAction: make(map[*InputSignal][]*Action),
-		active:         make(map[Input]bool),
-	}
-}
-
 func (im *InputManager) Tick() {
 	im.UpdateSignals()
 
@@ -533,7 +527,7 @@ func (im *InputManager) Tick() {
 
 	for _, actions := range im.signalToAction {
 		for _, action := range actions {
-			action.RunWhenShould()
+			action.RunWhenShould(im.loop)
 		}
 	}
 }

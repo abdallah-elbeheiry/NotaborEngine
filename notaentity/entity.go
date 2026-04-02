@@ -7,6 +7,7 @@ import (
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
 	"NotaborEngine/notashader"
+	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
 	"errors"
@@ -117,7 +118,7 @@ func (e *Entity) updateCollider(t *notamath.Transform2D) {
 }
 
 // Draw submits rendering commands to the renderer
-func (e *Entity) Draw(window *notacore.Window, loop *notacore.Loop) error {
+func (e *Entity) Draw(window *notacore.Window, loop *notatask.Loop) error {
 	e.snapShot()
 	if !e.Visible.Get() || !e.Active.Get() {
 		return nil

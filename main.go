@@ -8,7 +8,7 @@ import (
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
 	"NotaborEngine/notashader"
-	"NotaborEngine/notasound"
+	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
 	"fmt"
@@ -25,8 +25,8 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	logicLoop := notacore.CreateLoop(3000)
-	drawingLoop := notacore.CreateLoop(1000)
+	logicLoop := notatask.CreateLoop(1000)
+	drawingLoop := notatask.CreateLoop(120)
 
 	engine.SetInputFrequency(3000)
 	engine.SoundManager.SetSoundsFolder("resources/sounds")
@@ -44,7 +44,7 @@ func main() {
 		Type:      notacore.Windowed,
 		Resizable: true,
 		TargetFPS: 60,
-		Loops:     []*notacore.Loop{logicLoop, drawingLoop},
+		Loops:     []*notatask.Loop{logicLoop, drawingLoop},
 	}
 
 	win, err := engine.CreateWindow(cfg)
@@ -93,7 +93,7 @@ func main() {
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
 	// Add draw calls
-	drawingLoop.Add(func() error {
+	drawingLoop.Add(notatask.CreateTask(func() error {
 		err := entity.Draw(win, logicLoop)
 		err = entity1.Draw(win, logicLoop)
 		err = entity2.Draw(win, logicLoop)
@@ -101,7 +101,7 @@ func main() {
 			return err
 		}
 		return nil
-	})
+	}))
 	// END OF ENTITY CREATION
 
 	// START OF INPUT MAPPING
@@ -134,42 +134,50 @@ func main() {
 	// Movement speed
 	speed := float32(0.001)
 
-	actW.AddRunnable(func() error { deltaMove.Y += speed; return nil })
-	actS.AddRunnable(func() error { deltaMove.Y -= speed; return nil })
-	actA.AddRunnable(func() error { deltaMove.X -= speed; return nil })
-	actD.AddRunnable(func() error { deltaMove.X += speed; return nil })
+	actW.AddTask(notatask.CreateTask(func() error { deltaMove.Y += speed; return nil }, notatask.RunOnce()))
+	actS.AddTask(notatask.CreateTask(func() error { deltaMove.Y -= speed; return nil }, notatask.RunOnce()))
+	actA.AddTask(notatask.CreateTask(func() error { deltaMove.X -= speed; return nil }, notatask.RunOnce()))
+	actD.AddTask(notatask.CreateTask(func() error { deltaMove.X += speed; return nil }, notatask.RunOnce()))
 
-	logicLoop.Add(func() error {
+	logicLoop.Add(notatask.CreateTask(func() error {
 		entity.Move(deltaMove)
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
 			entity.Move(deltaMove.Neg()) // undo
 		}
 		deltaMove = notamath.Vec2{} // reset
 		return nil
-	})
+	}))
 	val := 1.0
-	logicLoop.Add(func() error {
+	logicLoop.Add(notatask.CreateTask(func() error {
 		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
-			err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
+			//err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
 			if err != nil {
 				return err
 			}
 			val *= -1
 		}
 		return nil
-	})
+	}))
 
 	i := notatomic.Int64{}
-	logicLoop.Add(notacore.FinishAfter(func() error {
+
+	incrementCounter := func() error {
 		i.Inc()
 		return nil
-	}, time.Second*10))
+	}
 
-	logicLoop.Add(notacore.Delay(func() error {
+	printLoopSpeed := func() error {
 		fmt.Printf("Average Hz: %d\n", i.Get()/10)
 		return nil
-	}, time.Second*11))
+	}
+
+	incrementTask := notatask.CreateTask(incrementCounter, notatask.FinishAfter(time.Second*10))
+	printLoopTask := notatask.CreateTask(printLoopSpeed, notatask.WithDelay(time.Second*11), notatask.RunOnce())
+
+	logicLoop.Add(incrementTask)
+
+	logicLoop.Add(printLoopTask)
 	// END OF GAME LOGIC
 
 	// RUN ENGINE

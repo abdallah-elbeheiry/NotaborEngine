@@ -1,6 +1,7 @@
 package notacore
 
 import (
+	"NotaborEngine/notatask"
 	"time"
 )
 
@@ -27,11 +28,11 @@ type Action struct {
 	Cooldown time.Duration
 	lastRun  time.Time
 
-	runnables []Runnable
+	tasks []*notatask.Task
 }
 
-func (a *Action) RunWhenShould() bool {
-
+// RunWhenShould checks if the action should run and schedules its tasks
+func (a *Action) RunWhenShould(loop *notatask.Loop) bool {
 	a.shouldToggle()
 	a.updateHoldInformation()
 
@@ -57,9 +58,8 @@ func (a *Action) RunWhenShould() bool {
 
 	if result {
 		a.lastRun = time.Now()
-		err := a.Run()
-		if err != nil {
-			return false
+		for _, t := range a.tasks {
+			loop.Add(t) // schedule task on the loop
 		}
 	}
 	return result
@@ -85,19 +85,12 @@ func (a *Action) updateHoldInformation() {
 	a.LastHeldTime = a.lastHold.Sub(a.lastRelease)
 }
 
-func (a *Action) Run() error {
-	for _, r := range a.runnables {
-		if err := r(); err != nil {
-			return err
-		}
-	}
-	return nil
+// AddTask adds a task to this action
+func (a *Action) AddTask(t *notatask.Task) {
+	a.tasks = append(a.tasks, t)
 }
 
+// BindSignal binds an input signal to this action
 func (a *Action) BindSignal(sig *InputSignal) {
 	a.signal = sig
-}
-
-func (a *Action) AddRunnable(r Runnable) {
-	a.runnables = append(a.runnables, r)
 }
