@@ -3,24 +3,23 @@ package notaentity
 import (
 	"NotaborEngine/notacollision"
 	"NotaborEngine/notacolor"
-	"NotaborEngine/notacore"
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
+	"NotaborEngine/notarender"
 	"NotaborEngine/notashader"
-	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
-	"errors"
-	"time"
 )
 
 type Entity struct {
 	ID   string
 	Name string
 
-	Transform notatomic.Pointer[notamath.Transform2D]
-	Active    notatomic.Bool
-	Visible   notatomic.Bool
+	index   int
+	manager *EntityManager
+
+	Active  notatomic.Bool
+	Visible notatomic.Bool
 
 	Sprite   notatomic.Pointer[notatexture.Sprite]
 	Polygon  notatomic.Pointer[notageometry.Polygon]
@@ -32,24 +31,21 @@ type Entity struct {
 	lastSubmittedFrame notatomic.UInt64
 }
 
-func NewEntity(id, name string) *Entity {
+func newEntity(id, name string, index int, manager *EntityManager) *Entity {
 	e := &Entity{
-		ID:   id,
-		Name: name,
+		ID:      id,
+		Name:    name,
+		index:   index,
+		manager: manager,
 	}
+
 	e.Active.Set(true)
 	e.Visible.Set(true)
-	trans := notamath.NewTransform2D()
-	e.Transform.Set(&trans)
-
-	// Default color
-	defaultColor := notacolor.White
-	e.Color.Set(&defaultColor)
+	e.Color.Set(&notacolor.White)
 
 	return e
 }
 
-// Builder methods
 func (e *Entity) WithSprite(s *notatexture.Sprite) *Entity {
 	e.Sprite.Set(s)
 	return e
@@ -75,56 +71,44 @@ func (e *Entity) WithColor(c notacolor.Color) *Entity {
 	return e
 }
 
-// Movement methods
 func (e *Entity) Move(delta notamath.Vec2) {
 	if !e.Active.Get() {
 		return
 	}
-
-	for {
-		oldT := e.Transform.Get()
-		newT := *oldT
-		newT.TranslateBy(delta)
-
-		if e.Transform.CompareAndSwap(oldT, &newT) {
-			e.updateCollider(&newT)
-			break
-		}
-	}
+	e.manager.SubmitMove(e.index, delta)
 }
 
 func (e *Entity) Rotate(rad float32) {
 	if !e.Active.Get() {
 		return
 	}
-
-	for {
-		oldT := e.Transform.Get()
-		newT := *oldT
-		newT.RotateBy(rad)
-
-		if e.Transform.CompareAndSwap(oldT, &newT) {
-			e.updateCollider(&newT)
-			break
-		}
-	}
+	e.manager.SubmitRotation(e.index, rad)
 }
 
-func (e *Entity) updateCollider(t *notamath.Transform2D) {
-	if cPtr := e.Collider.Get(); cPtr != nil {
-		c := *cPtr
-		c.UpdateFromTransform(t)
+func (e *Entity) Scale(factor notamath.Vec2) {
+	if !e.Active.Get() {
+		return
 	}
+	e.manager.SubmitScale(e.index, factor)
 }
 
-// Draw submits rendering commands to the renderer
-func (e *Entity) Draw(window *notacore.Window, loop *notatask.Loop) error {
-	e.snapShot()
+func (e *Entity) Position() notamath.Vec2 {
+	return e.manager.GetPosition(e.index)
+}
+
+func (e *Entity) Rotation() float32 {
+	return e.manager.GetRotation(e.index)
+}
+
+func (e *Entity) ScaleValue() notamath.Vec2 {
+	return e.manager.GetScale(e.index)
+}
+
+func (e *Entity) Draw(renderer *notarender.Renderer, alpha float32) error {
 	if !e.Visible.Get() || !e.Active.Get() {
 		return nil
 	}
 
-	renderer := window.RunTime.Renderer
 	frame := renderer.FrameID.Get()
 
 	for {
@@ -137,18 +121,17 @@ func (e *Entity) Draw(window *notacore.Window, loop *notatask.Loop) error {
 		}
 	}
 
-	shader := e.Shader.Get()
-	if shader == nil {
-		return errors.New("Entity with ID " + e.ID + " has no shader")
-	}
+	pos := e.manager.GetPosition(e.index)
+	scale := e.manager.GetScale(e.index)
+	rot := e.manager.GetRotation(e.index)
 
-	alpha := loop.Alpha(time.Now())
-	if alpha > 1 {
-		alpha = 1
+	transform := notamath.Transform2D{
+		Position: pos,
+		Rotation: rot,
+		Scale:    scale,
 	}
-
-	t := e.Transform.Get()
-	model := t.InterpolatedMatrix(alpha)
+	transform.Snapshot()
+	model := transform.InterpolatedMatrix(alpha)
 
 	color := e.Color.Get()
 	if color == nil {
@@ -156,14 +139,35 @@ func (e *Entity) Draw(window *notacore.Window, loop *notatask.Loop) error {
 	}
 
 	if sprite := e.Sprite.Get(); sprite != nil && sprite.Polygon != nil {
-		renderer.SubmitPolygon(sprite.Polygon, model, *color, sprite.Texture, shader)
+		renderer.SubmitPolygon(sprite.Polygon, model, *color, sprite.Texture, e.Shader.Get())
 		return nil
 	}
 
 	if poly := e.Polygon.Get(); poly != nil {
-		renderer.SubmitPolygon(poly, model, *color, nil, shader)
+		renderer.SubmitPolygon(poly, model, *color, nil, e.Shader.Get())
 	}
+
 	return nil
+}
+
+// Collider update
+func (e *Entity) updateCollider() {
+	cPtr := e.Collider.Get()
+	if cPtr == nil {
+		return
+	}
+
+	pos := e.manager.GetPosition(e.index)
+	rot := e.manager.GetRotation(e.index)
+	scale := e.manager.GetScale(e.index)
+
+	t := notamath.Transform2D{}
+	t.SetPosition(pos)
+	t.SetRotation(rot)
+	t.SetScale(scale)
+
+	c := *cPtr
+	c.UpdateFromTransform(&t)
 }
 
 func (e *Entity) CollidesWith(other *Entity) bool {
@@ -173,10 +177,6 @@ func (e *Entity) CollidesWith(other *Entity) bool {
 	if c1 == nil || c2 == nil {
 		return false
 	}
-	return notacollision.Intersects(*c1, *c2)
-}
 
-func (e *Entity) snapShot() {
-	t := e.Transform.Get()
-	t.Snapshot()
+	return notacollision.Intersects(*c1, *c2)
 }

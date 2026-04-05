@@ -1,6 +1,7 @@
 package notacore
 
 import (
+	"NotaborEngine/notaentity"
 	"NotaborEngine/notasound"
 	"NotaborEngine/notatask"
 	"errors"
@@ -24,6 +25,7 @@ type Engine struct {
 	WindowManager *windowManager
 	InputManager  *InputManager
 	SoundManager  *notasound.SoundManager
+	EntityManager *notaentity.EntityManager
 
 	settings  *Settings
 	inputLoop *notatask.Loop
@@ -34,13 +36,13 @@ func (e *Engine) Run() error {
 	e.running = true
 
 	if e.inputLoop != nil {
-		e.inputLoop.Start()
+		e.inputLoop.Start(e.EntityManager)
 	}
 	// Start all logic loops
 	for _, w := range e.Windows {
 		cfg := w.GetConfig()
 		for _, loop := range cfg.Loops {
-			loop.Start()
+			loop.Start(e.EntityManager)
 		}
 		w.GetRuntime().lastRender = time.Now()
 	}
@@ -131,6 +133,7 @@ func (e *Engine) initPlatform() error {
 
 	e.WindowManager = wm
 	e.InputManager = &InputManager{}
+	e.EntityManager = notaentity.NewEntityManager()
 	return nil
 }
 
