@@ -12,7 +12,7 @@ import (
 // Entities that don't share the same collision group will never collide.
 type CollisionGroup struct {
 	Name     string
-	Entities []int // entity indices
+	Entities []int
 }
 
 // collisionTable is a SuperHashMap (HashMapMap) which contains
@@ -21,12 +21,8 @@ type collisionTable struct {
 	pairs map[int]map[int]bool
 }
 
-// EntityManager manages entity transforms, batching of transform updates,
-// collision groups, and collision detection results.
-//
-// Transform updates are submitted first and applied in bulk when flushing.
-// Collision results are recalculated every frame after flushing colliders.
-type EntityManager struct {
+// transformData holds all transform arrays in an immutable wrapper
+type transformData struct {
 	pos   []float32
 	rot   []float32
 	scale []float32
@@ -34,6 +30,27 @@ type EntityManager struct {
 	move   []float32
 	rotD   []float32
 	scaleD []float32
+}
+
+// indexMapping holds the ID-to-index mapping
+type indexMapping struct {
+	idToIndex   map[string]int
+	freeIndices []int
+}
+
+// collisionGroupData holds all collision groups
+type collisionGroupData struct {
+	groups map[string]*CollisionGroup
+}
+
+// EntityManager manages entity transforms, batching of transform updates,
+// collision groups, and collision detection results.
+//
+// Transform updates are submitted first and applied in bulk when flushing.
+// Collision results are recalculated every frame after flushing colliders.
+type EntityManager struct {
+	transforms notatomic.Pointer[transformData]
+	mapping    notatomic.Pointer[indexMapping]
 
 	dirtyMove  notatomic.Bool
 	dirtyRot   notatomic.Bool
@@ -41,11 +58,8 @@ type EntityManager struct {
 
 	entities notatomic.Pointer[[]*Entity]
 
-	collisionGroups  map[string]*CollisionGroup
-	collisionResults notatomic.Pointer[collisionTable]
-
-	idToIndex   map[string]int
-	freeIndices []int
+	collisionGroupsData notatomic.Pointer[collisionGroupData]
+	collisionResults    notatomic.Pointer[collisionTable]
 }
 
 // NewEntityManager initializes the manager.
@@ -53,13 +67,31 @@ type EntityManager struct {
 // there is usually no need to call it manually.
 func NewEntityManager() *EntityManager {
 
-	em := &EntityManager{
-		idToIndex:       make(map[string]int),
-		collisionGroups: make(map[string]*CollisionGroup),
+	em := &EntityManager{}
+
+	initialTransforms := &transformData{
+		pos:    make([]float32, 0, 64),
+		rot:    make([]float32, 0, 32),
+		scale:  make([]float32, 0, 64),
+		move:   make([]float32, 0, 64),
+		rotD:   make([]float32, 0, 32),
+		scaleD: make([]float32, 0, 64),
 	}
+	em.transforms.Set(initialTransforms)
+
+	initialMapping := &indexMapping{
+		idToIndex:   make(map[string]int),
+		freeIndices: make([]int, 0),
+	}
+	em.mapping.Set(initialMapping)
 
 	initialEntities := make([]*Entity, 32)
 	em.entities.Set(&initialEntities)
+
+	initialGroups := &collisionGroupData{
+		groups: make(map[string]*CollisionGroup),
+	}
+	em.collisionGroupsData.Set(initialGroups)
 
 	initialTable := &collisionTable{
 		pairs: make(map[int]map[int]bool),
@@ -76,28 +108,63 @@ func (em *EntityManager) CreateEntity(id string) *Entity {
 
 	var index int
 
-	if len(em.freeIndices) > 0 {
-		index = em.freeIndices[len(em.freeIndices)-1]
-		em.freeIndices = em.freeIndices[:len(em.freeIndices)-1]
-	} else {
+	for {
+		oldMapping := em.mapping.Get()
 
-		index = len(em.rot)
+		var newMapping *indexMapping
+		if len(oldMapping.freeIndices) > 0 {
+			// Reuse free index
+			index = oldMapping.freeIndices[len(oldMapping.freeIndices)-1]
+			newMapping = &indexMapping{
+				idToIndex:   copyMap(oldMapping.idToIndex),
+				freeIndices: append([]int(nil), oldMapping.freeIndices[:len(oldMapping.freeIndices)-1]...),
+			}
+		} else {
+			// Allocate new index
+			oldTransforms := em.transforms.Get()
+			index = len(oldTransforms.rot)
 
-		em.pos = append(em.pos, 0, 0)
-		em.move = append(em.move, 0, 0)
+			newMapping = &indexMapping{
+				idToIndex:   copyMap(oldMapping.idToIndex),
+				freeIndices: append([]int(nil), oldMapping.freeIndices...),
+			}
+		}
 
-		em.rot = append(em.rot, 0)
-		em.rotD = append(em.rotD, 0)
+		newMapping.idToIndex[id] = index
 
-		em.scale = append(em.scale, 1, 1)
-		em.scaleD = append(em.scaleD, 1, 1)
+		if em.mapping.CompareAndSwap(oldMapping, newMapping) {
+			break
+		}
 	}
 
-	e := newEntity(id, index, em)
-	em.idToIndex[id] = index
-
 	for {
+		oldTransforms := em.transforms.Get()
 
+		if index < len(oldTransforms.rot) {
+			// Index already exists, no expansion needed
+			break
+		}
+
+		// Need to expand
+		newTransforms := &transformData{
+			pos:    append(append([]float32(nil), oldTransforms.pos...), 0, 0),
+			rot:    append(append([]float32(nil), oldTransforms.rot...), 0),
+			scale:  append(append([]float32(nil), oldTransforms.scale...), 1, 1),
+			move:   append(append([]float32(nil), oldTransforms.move...), 0, 0),
+			rotD:   append(append([]float32(nil), oldTransforms.rotD...), 0),
+			scaleD: append(append([]float32(nil), oldTransforms.scaleD...), 1, 1),
+		}
+
+		if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+			break
+		}
+	}
+
+	// Create entity
+	e := newEntity(id, index, em)
+
+	// CAS loop to add entity to entities slice
+	for {
 		oldPtr := em.entities.Get()
 		oldSlice := *oldPtr
 
@@ -107,6 +174,8 @@ func (em *EntityManager) CreateEntity(id string) *Entity {
 			grow := make([]*Entity, index+32)
 			copy(grow, newSlice)
 			newSlice = grow
+		} else {
+			newSlice = append([]*Entity(nil), oldSlice...)
 		}
 
 		newSlice[index] = e
@@ -128,11 +197,31 @@ func (em *EntityManager) CreateEntity(id string) *Entity {
 // Submitting is recommended inside a fast loop (≈60Hz+).
 func (em *EntityManager) SubmitMove(index int, delta notamath.Vec2) {
 
-	i := index * 2
-	em.move[i] += delta.X
-	em.move[i+1] += delta.Y
+	for {
+		oldTransforms := em.transforms.Get()
 
-	em.dirtyMove.SetIfFalse(true)
+		i := index * 2
+		if i+1 >= len(oldTransforms.move) {
+			return
+		}
+
+		newTransforms := &transformData{
+			pos:    oldTransforms.pos,
+			rot:    oldTransforms.rot,
+			scale:  oldTransforms.scale,
+			move:   append([]float32(nil), oldTransforms.move...),
+			rotD:   oldTransforms.rotD,
+			scaleD: oldTransforms.scaleD,
+		}
+
+		newTransforms.move[i] += delta.X
+		newTransforms.move[i+1] += delta.Y
+
+		if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+			em.dirtyMove.SetIfFalse(true)
+			break
+		}
+	}
 }
 
 // SubmitRotation queues up a rotation request to the manager.
@@ -143,8 +232,29 @@ func (em *EntityManager) SubmitMove(index int, delta notamath.Vec2) {
 // Submitting is recommended inside a fast loop (120Hz+).
 func (em *EntityManager) SubmitRotation(index int, rad float32) {
 
-	em.rotD[index] += rad
-	em.dirtyRot.SetIfFalse(true)
+	for {
+		oldTransforms := em.transforms.Get()
+
+		if index >= len(oldTransforms.rotD) {
+			return
+		}
+
+		newTransforms := &transformData{
+			pos:    oldTransforms.pos,
+			rot:    oldTransforms.rot,
+			scale:  oldTransforms.scale,
+			move:   oldTransforms.move,
+			rotD:   append([]float32(nil), oldTransforms.rotD...),
+			scaleD: oldTransforms.scaleD,
+		}
+
+		newTransforms.rotD[index] += rad
+
+		if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+			em.dirtyRot.SetIfFalse(true)
+			break
+		}
+	}
 }
 
 // SubmitScale queues up a scale request to the manager.
@@ -158,18 +268,38 @@ func (em *EntityManager) SubmitRotation(index int, rad float32) {
 // Submitting is recommended inside a fast loop (≈60Hz+).
 func (em *EntityManager) SubmitScale(index int, factor notamath.Vec2) {
 
-	i := index * 2
+	for {
+		oldTransforms := em.transforms.Get()
 
-	em.scaleD[i] *= factor.X
-	em.scaleD[i+1] *= factor.Y
+		i := index * 2
+		if i+1 >= len(oldTransforms.scaleD) {
+			return
+		}
 
-	em.dirtyScale.SetIfFalse(true)
+		newTransforms := &transformData{
+			pos:    oldTransforms.pos,
+			rot:    oldTransforms.rot,
+			scale:  oldTransforms.scale,
+			move:   oldTransforms.move,
+			rotD:   oldTransforms.rotD,
+			scaleD: append([]float32(nil), oldTransforms.scaleD...),
+		}
+
+		newTransforms.scaleD[i] *= factor.X
+		newTransforms.scaleD[i+1] *= factor.Y
+
+		if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+			em.dirtyScale.SetIfFalse(true)
+			break
+		}
+	}
 }
 
 // Flush updates all entity transforms and synchronizes colliders.
 //
 // Typically called once per frame before running collision detection or drawing.
 func (em *EntityManager) Flush() {
+
 	em.flushEntities()
 	em.flushColliders()
 }
@@ -182,27 +312,79 @@ func (em *EntityManager) Flush() {
 func (em *EntityManager) flushEntities() {
 
 	if em.dirtyMove.Get() {
+		for {
+			oldTransforms := em.transforms.Get()
 
-		vek32.Add_Inplace(em.pos, em.move)
-		vek32.Zeros_Into(em.move, len(em.move))
+			newPos := append([]float32(nil), oldTransforms.pos...)
+			newMove := make([]float32, len(oldTransforms.move))
 
-		em.dirtyMove.Set(false)
+			vek32.Add_Inplace(newPos, oldTransforms.move)
+
+			newTransforms := &transformData{
+				pos:    newPos,
+				rot:    oldTransforms.rot,
+				scale:  oldTransforms.scale,
+				move:   newMove,
+				rotD:   oldTransforms.rotD,
+				scaleD: oldTransforms.scaleD,
+			}
+
+			if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+				em.dirtyMove.Set(false)
+				break
+			}
+		}
 	}
 
 	if em.dirtyRot.Get() {
+		for {
+			oldTransforms := em.transforms.Get()
 
-		vek32.Add_Inplace(em.rot, em.rotD)
-		vek32.Zeros_Into(em.rotD, len(em.rotD))
+			newRot := append([]float32(nil), oldTransforms.rot...)
+			newRotD := make([]float32, len(oldTransforms.rotD))
 
-		em.dirtyRot.Set(false)
+			vek32.Add_Inplace(newRot, oldTransforms.rotD)
+
+			newTransforms := &transformData{
+				pos:    oldTransforms.pos,
+				rot:    newRot,
+				scale:  oldTransforms.scale,
+				move:   oldTransforms.move,
+				rotD:   newRotD,
+				scaleD: oldTransforms.scaleD,
+			}
+
+			if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+				em.dirtyRot.Set(false)
+				break
+			}
+		}
 	}
 
 	if em.dirtyScale.Get() {
+		for {
+			oldTransforms := em.transforms.Get()
 
-		vek32.Mul_Inplace(em.scale, em.scaleD)
-		vek32.Ones_Into(em.scaleD, len(em.scaleD))
+			newScale := append([]float32(nil), oldTransforms.scale...)
+			newScaleD := make([]float32, len(oldTransforms.scaleD))
+			vek32.Ones_Into(newScaleD, len(newScaleD))
 
-		em.dirtyScale.Set(false)
+			vek32.Mul_Inplace(newScale, oldTransforms.scaleD)
+
+			newTransforms := &transformData{
+				pos:    oldTransforms.pos,
+				rot:    oldTransforms.rot,
+				scale:  newScale,
+				move:   oldTransforms.move,
+				rotD:   oldTransforms.rotD,
+				scaleD: newScaleD,
+			}
+
+			if em.transforms.CompareAndSwap(oldTransforms, newTransforms) {
+				em.dirtyScale.Set(false)
+				break
+			}
+		}
 	}
 }
 
@@ -220,39 +402,66 @@ func (em *EntityManager) flushColliders() {
 }
 
 func (em *EntityManager) GetPosition(id string) notamath.Vec2 {
-	return em.getPositionIndex(em.idToIndex[id])
+	mapping := em.mapping.Get()
+	index, ok := mapping.idToIndex[id]
+	if !ok {
+		return notamath.Vec2{}
+	}
+	return em.getPositionIndex(index)
 }
 
 func (em *EntityManager) GetScale(id string) notamath.Vec2 {
-	return em.getScaleIndex(em.idToIndex[id])
+	mapping := em.mapping.Get()
+	index, ok := mapping.idToIndex[id]
+	if !ok {
+		return notamath.Vec2{}
+	}
+	return em.getScaleIndex(index)
 }
 
 func (em *EntityManager) GetRotation(id string) float32 {
-	return em.getRotationIndex(em.idToIndex[id])
+	mapping := em.mapping.Get()
+	index, ok := mapping.idToIndex[id]
+	if !ok {
+		return 0
+	}
+	return em.getRotationIndex(index)
 }
 
 func (em *EntityManager) getPositionIndex(index int) notamath.Vec2 {
-
+	transforms := em.transforms.Get()
 	i := index * 2
 
+	if i+1 >= len(transforms.pos) {
+		return notamath.Vec2{}
+	}
+
 	return notamath.Vec2{
-		X: em.pos[i],
-		Y: em.pos[i+1],
+		X: transforms.pos[i],
+		Y: transforms.pos[i+1],
 	}
 }
 
 func (em *EntityManager) getScaleIndex(index int) notamath.Vec2 {
-
+	transforms := em.transforms.Get()
 	i := index * 2
 
+	if i+1 >= len(transforms.scale) {
+		return notamath.Vec2{}
+	}
+
 	return notamath.Vec2{
-		X: em.scale[i],
-		Y: em.scale[i+1],
+		X: transforms.scale[i],
+		Y: transforms.scale[i+1],
 	}
 }
 
 func (em *EntityManager) getRotationIndex(index int) float32 {
-	return em.rot[index]
+	transforms := em.transforms.Get()
+	if index >= len(transforms.rot) {
+		return 0
+	}
+	return transforms.rot[index]
 }
 
 // GetEntities returns a slice containing all entities in the manager.
@@ -265,7 +474,8 @@ func (em *EntityManager) GetEntities() []*Entity {
 // Returns nil if the entity does not exist.
 func (em *EntityManager) GetEntity(id string) *Entity {
 
-	idx, ok := em.idToIndex[id]
+	mapping := em.mapping.Get()
+	idx, ok := mapping.idToIndex[id]
 	if !ok {
 		return nil
 	}
@@ -283,16 +493,29 @@ func (em *EntityManager) GetEntity(id string) *Entity {
 // Its index becomes available for reuse by future entities.
 func (em *EntityManager) Remove(id string) {
 
-	idx, ok := em.idToIndex[id]
-	if !ok {
-		return
+	// CAS loop to update mapping
+	var idx int
+	for {
+		oldMapping := em.mapping.Get()
+
+		var ok bool
+		idx, ok = oldMapping.idToIndex[id]
+		if !ok {
+			return
+		}
+
+		newMapping := &indexMapping{
+			idToIndex:   copyMap(oldMapping.idToIndex),
+			freeIndices: append(append([]int(nil), oldMapping.freeIndices...), idx),
+		}
+		delete(newMapping.idToIndex, id)
+
+		if em.mapping.CompareAndSwap(oldMapping, newMapping) {
+			break
+		}
 	}
 
-	em.freeIndices = append(em.freeIndices, idx)
-	delete(em.idToIndex, id)
-
 	for {
-
 		oldPtr := em.entities.Get()
 		oldSlice := *oldPtr
 
@@ -308,18 +531,31 @@ func (em *EntityManager) Remove(id string) {
 		}
 	}
 
-	for _, g := range em.collisionGroups {
+	for {
+		oldGroupData := em.collisionGroupsData.Get()
 
-		filter := g.Entities[:0]
+		newGroupData := &collisionGroupData{
+			groups: make(map[string]*CollisionGroup),
+		}
 
-		for _, v := range g.Entities {
+		for name, g := range oldGroupData.groups {
+			filter := make([]int, 0, len(g.Entities))
 
-			if v != idx {
-				filter = append(filter, v)
+			for _, v := range g.Entities {
+				if v != idx {
+					filter = append(filter, v)
+				}
+			}
+
+			newGroupData.groups[name] = &CollisionGroup{
+				Name:     name,
+				Entities: filter,
 			}
 		}
 
-		g.Entities = filter
+		if em.collisionGroupsData.CompareAndSwap(oldGroupData, newGroupData) {
+			break
+		}
 	}
 }
 
@@ -330,14 +566,35 @@ func (em *EntityManager) Remove(id string) {
 // Entities in different groups will never collide.
 func (em *EntityManager) AddToCollisionGroup(group string, e *Entity) {
 
-	g, ok := em.collisionGroups[group]
+	for {
+		oldGroupData := em.collisionGroupsData.Get()
 
-	if !ok {
-		g = &CollisionGroup{Name: group}
-		em.collisionGroups[group] = g
+		newGroupData := &collisionGroupData{
+			groups: make(map[string]*CollisionGroup),
+		}
+
+		// Copy all existing groups
+		for name, g := range oldGroupData.groups {
+			newGroupData.groups[name] = &CollisionGroup{
+				Name:     name,
+				Entities: append([]int(nil), g.Entities...),
+			}
+		}
+
+		// Add to target group
+		if existingGroup, ok := newGroupData.groups[group]; ok {
+			existingGroup.Entities = append(existingGroup.Entities, e.index)
+		} else {
+			newGroupData.groups[group] = &CollisionGroup{
+				Name:     group,
+				Entities: []int{e.index},
+			}
+		}
+
+		if em.collisionGroupsData.CompareAndSwap(oldGroupData, newGroupData) {
+			break
+		}
 	}
-
-	g.Entities = append(g.Entities, e.index)
 }
 
 // SolveGroupCollision computes collisions between all entities
@@ -347,13 +604,16 @@ func (em *EntityManager) AddToCollisionGroup(group string, e *Entity) {
 // since flushing clears previous collision data.
 func (em *EntityManager) SolveGroupCollision(id string) {
 
-	g := em.collisionGroups[id]
-	if g == nil {
+	groupData := em.collisionGroupsData.Get()
+	g, ok := groupData.groups[id]
+	if !ok || g == nil {
 		return
 	}
 
 	entities := *em.entities.Get()
-	table := em.collisionResults.Get()
+
+	// Build new collision table
+	newPairs := make(map[int]map[int]bool)
 
 	for a := 0; a < len(g.Entities); a++ {
 
@@ -384,8 +644,47 @@ func (em *EntityManager) SolveGroupCollision(id string) {
 			}
 
 			if notacollision.Intersects(*c1, *c2) {
-				storeCollision(table, i, j)
+				if newPairs[i] == nil {
+					newPairs[i] = make(map[int]bool)
+				}
+				if newPairs[j] == nil {
+					newPairs[j] = make(map[int]bool)
+				}
+				newPairs[i][j] = true
+				newPairs[j][i] = true
 			}
+		}
+	}
+
+	for {
+		oldTable := em.collisionResults.Get()
+
+		mergedPairs := make(map[int]map[int]bool)
+
+		// Copy old pairs
+		for k, v := range oldTable.pairs {
+			mergedPairs[k] = make(map[int]bool)
+			for k2, v2 := range v {
+				mergedPairs[k][k2] = v2
+			}
+		}
+
+		// Add new pairs
+		for k, v := range newPairs {
+			if mergedPairs[k] == nil {
+				mergedPairs[k] = make(map[int]bool)
+			}
+			for k2, v2 := range v {
+				mergedPairs[k][k2] = v2
+			}
+		}
+
+		newTable := &collisionTable{
+			pairs: mergedPairs,
+		}
+
+		if em.collisionResults.CompareAndSwap(oldTable, newTable) {
+			break
 		}
 	}
 }
@@ -404,20 +703,6 @@ func (em *EntityManager) syncColliders() {
 	}
 }
 
-func storeCollision(table *collisionTable, a, b int) {
-
-	if table.pairs[a] == nil {
-		table.pairs[a] = make(map[int]bool)
-	}
-
-	if table.pairs[b] == nil {
-		table.pairs[b] = make(map[int]bool)
-	}
-
-	table.pairs[a][b] = true
-	table.pairs[b][a] = true
-}
-
 // Collides checks whether two entities are currently colliding.
 func (em *EntityManager) Collides(a, b *Entity) bool {
 
@@ -429,4 +714,13 @@ func (em *EntityManager) Collides(a, b *Entity) bool {
 	}
 
 	return row[b.index]
+}
+
+// copyMap creates a copy of the given map
+func copyMap(m map[string]int) map[string]int {
+	result := make(map[string]int, len(m))
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
 }
