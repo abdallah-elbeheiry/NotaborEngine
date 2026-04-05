@@ -3,6 +3,8 @@ package notamath
 import (
 	"fmt"
 	"math"
+
+	"github.com/viterin/vek/vek32"
 )
 
 type Mat3 struct {
@@ -64,19 +66,9 @@ func Mat3TRS(pos Vec2, rot float32, scale Vec2) Mat3 {
 }
 
 func (m Mat3) Mul(b Mat3) Mat3 {
-	var result Mat3
-
-	for row := 0; row < 3; row++ {
-		for col := 0; col < 3; col++ {
-			sum := float32(0)
-			for k := 0; k < 3; k++ {
-				sum += m.M[row*3+k] * b.M[k*3+col]
-			}
-			result.M[row*3+col] = sum
-		}
-	}
-
-	return result
+	var r Mat3
+	vek32.MatMul_Into(r.M[:], m.M[:], b.M[:], 3)
+	return r
 }
 
 func (m Mat3) TransformPo2(p Po2) Po2 {

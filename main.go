@@ -4,7 +4,6 @@ import (
 	"NotaborEngine/notacollision"
 	"NotaborEngine/notacolor"
 	"NotaborEngine/notacore"
-	"NotaborEngine/notaentity"
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
 	"NotaborEngine/notashader"
@@ -25,13 +24,13 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	logicLoop := notatask.CreateLoop(100000)
-	drawingLoop := notatask.CreateLoop(120)
+	logicLoop := notatask.CreateLoop(3000)
+	drawingLoop := notatask.CreateLoop(60)
 
-	engine.SetInputFrequency(3000)
+	engine.SetInputFrequency(2000)
 	engine.SoundManager.SetSoundsFolder("resources/sounds")
 	im := engine.InputManager
-
+	em := engine.EntityManager
 	// END OF ENGINE SETUP
 
 	// START OF WINDOW CREATION
@@ -70,7 +69,7 @@ func main() {
 		fmt.Println(err)
 	}
 
-	entity := notaentity.NewEntity("quad", "Test Quad").
+	entity := em.CreateEntity("quad", "Test Quad").
 		WithSprite(sprite).
 		WithCollider(notacollision.NewPolygonCollider(rect.Points)).WithShader(shader).
 		WithColor(notacolor.White)
@@ -78,7 +77,7 @@ func main() {
 	// Static walls
 	rect1 := notageometry.CreateRectangle(0.2, 2)
 	sprite1 := &notatexture.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
-	entity1 := notaentity.NewEntity("wall", "Test Wall").
+	entity1 := em.CreateEntity("wall", "Test Wall").
 		WithPolygon(rect1).
 		WithCollider(notacollision.NewPolygonCollider(rect1.Points)).
 		WithSprite(sprite1).
@@ -86,17 +85,19 @@ func main() {
 	entity1.Move(notamath.Vec2{X: 1, Y: 0})
 
 	rect2 := notageometry.CreateRectangle(0.2, 2)
-	entity2 := notaentity.NewEntity("wall2", "Test Wall").
+	entity2 := em.CreateEntity("wall2", "Test Wall").
 		WithPolygon(rect2).
 		WithCollider(notacollision.NewPolygonCollider(rect2.Points)).
 		WithColor(notacolor.Red).WithShader(shader)
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
 
+	em.Flush()
+
 	// Add draw calls
 	drawingLoop.Add(notatask.CreateTask(func() error {
-		err := entity.Draw(win, logicLoop)
-		err = entity1.Draw(win, logicLoop)
-		err = entity2.Draw(win, logicLoop)
+		err := entity.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
+		err = entity1.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
+		err = entity2.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
 		if err != nil {
 			return err
 		}
@@ -150,6 +151,8 @@ func main() {
 	val := 1.0
 	logicLoop.Add(notatask.CreateTask(func() error {
 		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
+		entity.Rotate(float32(0.001 * val))
+		em.Flush()
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
 			//err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
 			if err != nil {

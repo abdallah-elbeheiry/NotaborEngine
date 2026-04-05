@@ -1,6 +1,7 @@
 package notatask
 
 import (
+	"NotaborEngine/notaentity"
 	"NotaborEngine/notatomic"
 	"errors"
 	"fmt"
@@ -42,7 +43,7 @@ type Loop struct {
 }
 
 // Start initializes the loop and workers
-func (l *Loop) Start() {
+func (l *Loop) Start(manager *notaentity.EntityManager) {
 	if l.stop != nil {
 		return
 	}
