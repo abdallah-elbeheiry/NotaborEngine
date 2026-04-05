@@ -18,7 +18,7 @@ type CollisionGroup struct {
 // collisionTable is a SuperHashMap (HashMapMap) which contains
 // the collision status of all entity pairs.
 type collisionTable struct {
-	pairs map[int]map[int]bool
+	pairs map[int]map[int]notamath.Vec2
 }
 
 // transformData holds all transform arrays in an immutable wrapper
@@ -94,7 +94,7 @@ func NewEntityManager() *EntityManager {
 	em.collisionGroupsData.Set(initialGroups)
 
 	initialTable := &collisionTable{
-		pairs: make(map[int]map[int]bool),
+		pairs: make(map[int]map[int]notamath.Vec2),
 	}
 	em.collisionResults.Set(initialTable)
 
@@ -395,7 +395,7 @@ func (em *EntityManager) flushColliders() {
 	em.syncColliders()
 
 	empty := &collisionTable{
-		pairs: make(map[int]map[int]bool),
+		pairs: make(map[int]map[int]notamath.Vec2),
 	}
 
 	em.collisionResults.Set(empty)
@@ -613,7 +613,7 @@ func (em *EntityManager) SolveGroupCollision(id string) {
 	entities := *em.entities.Get()
 
 	// Build new collision table
-	newPairs := make(map[int]map[int]bool)
+	newPairs := make(map[int]map[int]notamath.Vec2)
 
 	for a := 0; a < len(g.Entities); a++ {
 
@@ -643,15 +643,16 @@ func (em *EntityManager) SolveGroupCollision(id string) {
 				continue
 			}
 
-			if notacollision.Intersects(*c1, *c2) {
+			_, mtv := notacollision.IntersectsMTV(*c1, *c2)
+			if mtv != (notamath.Vec2{}) {
 				if newPairs[i] == nil {
-					newPairs[i] = make(map[int]bool)
+					newPairs[i] = make(map[int]notamath.Vec2)
 				}
 				if newPairs[j] == nil {
-					newPairs[j] = make(map[int]bool)
+					newPairs[j] = make(map[int]notamath.Vec2)
 				}
-				newPairs[i][j] = true
-				newPairs[j][i] = true
+				newPairs[i][j] = mtv
+				newPairs[j][i] = mtv.Neg() // inverse MTV
 			}
 		}
 	}
@@ -659,11 +660,11 @@ func (em *EntityManager) SolveGroupCollision(id string) {
 	for {
 		oldTable := em.collisionResults.Get()
 
-		mergedPairs := make(map[int]map[int]bool)
+		mergedPairs := make(map[int]map[int]notamath.Vec2)
 
 		// Copy old pairs
 		for k, v := range oldTable.pairs {
-			mergedPairs[k] = make(map[int]bool)
+			mergedPairs[k] = make(map[int]notamath.Vec2)
 			for k2, v2 := range v {
 				mergedPairs[k][k2] = v2
 			}
@@ -672,7 +673,7 @@ func (em *EntityManager) SolveGroupCollision(id string) {
 		// Add new pairs
 		for k, v := range newPairs {
 			if mergedPairs[k] == nil {
-				mergedPairs[k] = make(map[int]bool)
+				mergedPairs[k] = make(map[int]notamath.Vec2)
 			}
 			for k2, v2 := range v {
 				mergedPairs[k][k2] = v2
@@ -705,15 +706,32 @@ func (em *EntityManager) syncColliders() {
 
 // Collides checks whether two entities are currently colliding.
 func (em *EntityManager) Collides(a, b *Entity) bool {
+	collides, _ := em.CollidesMTV(a, b)
+	return collides
+}
 
+// GetMTV returns the minimum translation vector (MTV) between two entities.
+// The MTV is the vector needed to move one entity to the other's position.
+//
+// If the entities are not colliding, the MTV is (0, 0).
+func (em *EntityManager) GetMTV(a, b *Entity) notamath.Vec2 {
+	_, mtv := em.CollidesMTV(a, b)
+	return mtv
+}
+
+// CollidesMTV checks whether two entities are currently colliding,
+// and returns the minimum translation vector (MTV) between them.
+//
+// If the entities are not colliding, the MTV is (0, 0).
+func (em *EntityManager) CollidesMTV(a, b *Entity) (bool, notamath.Vec2) {
 	table := em.collisionResults.Get()
-
 	row := table.pairs[a.index]
 	if row == nil {
-		return false
+		return false, notamath.Vec2{}
 	}
 
-	return row[b.index]
+	mtv, ok := row[b.index]
+	return ok, mtv
 }
 
 // copyMap creates a copy of the given map

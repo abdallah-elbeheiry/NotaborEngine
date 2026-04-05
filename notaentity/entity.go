@@ -168,10 +168,6 @@ func (e *Entity) updateCollider() {
 	c.UpdateFromTransform(&t)
 }
 
-func (e *Entity) CollidesWith(other *Entity) bool {
-	return e.manager.collisionResults.Get().pairs[e.index][other.index]
-}
-
 func (e *Entity) GetId() string {
 	return e.ID
 }

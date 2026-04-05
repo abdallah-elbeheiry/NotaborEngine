@@ -24,7 +24,7 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	logicLoop := notatask.CreateLoop(3000)
+	logicLoop := notatask.CreateLoop(50000)
 	drawingLoop := notatask.CreateLoop(60)
 
 	engine.SetInputFrequency(2000)
@@ -75,21 +75,21 @@ func main() {
 		WithColor(notacolor.White)
 
 	// Static walls
-	rect1 := notageometry.CreateRectangle(0.2, 2)
+	rect1 := notageometry.CreateRectangle(0.5, 2)
 	sprite1 := &notatexture.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
 	entity1 := em.CreateEntity("wall").
 		WithPolygon(rect1).
 		WithCollider(notacollision.NewPolygonCollider(rect1.Points)).
 		WithSprite(sprite1).
 		WithColor(notacolor.Green).WithShader(shader)
-	entity1.Move(notamath.Vec2{X: 1, Y: 0})
+	entity1.Move(notamath.Vec2{X: 1.15, Y: 0})
 
-	rect2 := notageometry.CreateRectangle(0.2, 2)
+	rect2 := notageometry.CreateRectangle(0.5, 2)
 	entity2 := em.CreateEntity("wall2").
 		WithPolygon(rect2).
 		WithCollider(notacollision.NewPolygonCollider(rect2.Points)).
 		WithColor(notacolor.Red).WithShader(shader)
-	entity2.Move(notamath.Vec2{X: -1, Y: 0})
+	entity2.Move(notamath.Vec2{X: -1.15, Y: 0})
 
 	em.AddToCollisionGroup("group0", entity)
 	em.AddToCollisionGroup("group0", entity1)
@@ -115,23 +115,27 @@ func main() {
 	sigA := &notacore.InputSignal{}
 	sigS := &notacore.InputSignal{}
 	sigD := &notacore.InputSignal{}
+	sigLeft := &notacore.InputSignal{}
 
 	im.BindInput(notacore.KeyW, sigW)
 	im.BindInput(notacore.KeyA, sigA)
 	im.BindInput(notacore.KeyS, sigS)
 	im.BindInput(notacore.KeyD, sigD)
+	im.BindInput(notacore.MouseLeft, sigLeft)
 
 	// Actions
 	actW := &notacore.Action{Behavior: notacore.RunWhileHeld}
 	actS := &notacore.Action{Behavior: notacore.RunWhileHeld}
 	actA := &notacore.Action{Behavior: notacore.RunWhileHeld}
 	actD := &notacore.Action{Behavior: notacore.RunWhileHeld}
+	actMouseLeft := &notacore.Action{Behavior: notacore.RunOnceWhenPressed}
 
 	// Bind Actions to Signals
 	im.BindAction(sigW, actW)
 	im.BindAction(sigA, actA)
 	im.BindAction(sigS, actS)
 	im.BindAction(sigD, actD)
+	im.BindAction(sigLeft, actMouseLeft)
 	// END OF INPUT MAPPING
 
 	// START OF GAME LOGIC
@@ -144,28 +148,45 @@ func main() {
 	actS.AddTask(notatask.CreateTask(func() error { deltaMove.Y -= speed; return nil }, notatask.RunOnce()))
 	actA.AddTask(notatask.CreateTask(func() error { deltaMove.X -= speed; return nil }, notatask.RunOnce()))
 	actD.AddTask(notatask.CreateTask(func() error { deltaMove.X += speed; return nil }, notatask.RunOnce()))
+	actMouseLeft.AddTask(notatask.CreateTask(func() error { fmt.Println("Mouse left clicked"); return nil }, notatask.RunOnce()))
 
 	logicLoop.Add(notatask.CreateTask(func() error {
 		entity.Move(deltaMove)
-		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
-			entity.Move(deltaMove.Neg()) // undo
+		collision, mtv := em.CollidesMTV(entity, entity1)
+		if collision {
+			entity.Move(mtv)
+		}
+		collision = false
+		mtv = notamath.Vec2{}
+		collision, mtv = em.CollidesMTV(entity, entity2)
+
+		if collision {
+			entity.Move(mtv)
 		}
 		deltaMove = notamath.Vec2{} // reset
 		return nil
 	}))
-	val := float32(1)
+	val := notatomic.Float32{}
+	val.Set(1)
 	logicLoop.Add(notatask.CreateTask(func() error {
-		entity.Move(notamath.Vec2{X: 0.001 * val, Y: 0})
-		entity.Rotate(0.001 * val)
+		entity.Move(notamath.Vec2{X: 0.001 * val.Get(), Y: 0})
+		entity.Rotate(0.001)
 		em.Flush()
 		em.SolveGroupCollision("group0")
 		em.SolveGroupCollision("group1")
-		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
+		collision, mtv := em.CollidesMTV(entity, entity1)
+		if collision {
 			//err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
-			if err != nil {
-				return err
-			}
-			val *= -1
+			val.Set(val.Get() * -1)
+			entity.Move(mtv)
+		}
+		collision = false
+		mtv = notamath.Vec2{}
+		collision, mtv = em.CollidesMTV(entity, entity2)
+
+		if collision {
+			val.Set(val.Get() * -1)
+			entity.Move(mtv)
 		}
 		return nil
 	}))

@@ -2,12 +2,15 @@ package notacollision
 
 import (
 	"NotaborEngine/notamath"
+	"math"
 )
 
 type AABBCollider struct {
 	Min notamath.Vec2
 	Max notamath.Vec2
 }
+
+var mTVTravelDistance float32 = 1.0
 
 type Collider interface {
 	AABB() AABBCollider
@@ -25,183 +28,91 @@ func AABBIntersects(a, b AABBCollider) bool {
 		a.Max.Y >= b.Min.Y
 }
 
-func Intersects(a, b Collider) bool {
+func IntersectsMTV(a, b Collider) (bool, notamath.Vec2) {
 	if !BroadPhase(a, b) {
-		return false
+		return false, notamath.Vec2{}
 	}
 
 	switch a := a.(type) {
 	case *CircleCollider:
 		switch b := b.(type) {
 		case *CircleCollider:
-			return circleVsCircle(a, b)
+			return circleVsCircleMTV(a, b)
 		case *PolygonCollider:
-			return circleVsPolygon(a, b)
+			return circleVsPolygonMTV(a, b)
 		}
-
 	case *PolygonCollider:
 		switch b := b.(type) {
 		case *CircleCollider:
-			return circleVsPolygon(b, a)
+			ok, mtv := circleVsPolygonMTV(b, a)
+			return ok, mtv.Neg() // invert MTV for polygon->circle
 		case *PolygonCollider:
-			return polygonVsPolygon(a, b)
+			return polygonVsPolygonMTV(a, b)
 		}
 	}
 
-	return false
+	return false, notamath.Vec2{}
 }
 
-func polygonVsPolygon(a, b *PolygonCollider) bool {
-	aVertices := a.GetWorldVertices()
-	bVertices := b.GetWorldVertices()
-
-	nA := len(aVertices)
-	nB := len(bVertices)
-
-	for i := 0; i < nA; i++ {
-		a1 := aVertices[i]
-		a2 := aVertices[(i+1)%nA]
-
-		for j := 0; j < nB; j++ {
-			b1 := bVertices[j]
-			b2 := bVertices[(j+1)%nB]
-
-			if segmentsIntersect(a1, a2, b1, b2) {
-				return true
-			}
-		}
+func polygonVsPolygonMTV(a, b *PolygonCollider) (bool, notamath.Vec2) {
+	mtv := MTVPolygon(a, b)
+	if mtv.X == 0 && mtv.Y == 0 {
+		return false, notamath.Vec2{}
 	}
-
-	if pointInPolygon(aVertices[0], bVertices) {
-		return true
-	}
-
-	if pointInPolygon(bVertices[0], aVertices) {
-		return true
-	}
-
-	return false
+	return true, mtv
 }
 
-func circleVsCircle(a, b *CircleCollider) bool {
-	aCenter := a.WorldCenter()
-	bCenter := b.WorldCenter()
+func circleVsCircleMTV(a, b *CircleCollider) (bool, notamath.Vec2) {
+	dir := b.WorldCenter().Sub(a.WorldCenter())
+	distSq := dir.LenSquared()
+	rSum := a.WorldRadius() + b.WorldRadius()
+	if distSq >= rSum*rSum {
+		return false, notamath.Vec2{}
+	}
 
-	dx := aCenter.X - bCenter.X
-	dy := aCenter.Y - bCenter.Y
+	dist := float32(1.0)
+	if distSq > 0 {
+		dist = float32(math.Sqrt(float64(distSq)))
+	}
 
-	r := a.WorldRadius() + b.WorldRadius()
-
-	return dx*dx+dy*dy <= r*r
+	overlap := rSum - dist
+	mtv := dir.Mul(1 / dist).Mul(overlap) // normalize dir and scale by overlap
+	return true, mtv
 }
 
-func circleVsPolygon(c *CircleCollider, p *PolygonCollider) bool {
+func circleVsPolygonMTV(c *CircleCollider, p *PolygonCollider) (bool, notamath.Vec2) {
+	axes := getAxes(p.WorldVertices)
 	center := c.WorldCenter()
-	radius := c.WorldRadius()
-	r2 := radius * radius
 
-	vertices := p.GetWorldVertices()
-	n := len(vertices)
+	minOverlap := float32(1e30)
+	var smallestAxis notamath.Vec2
 
-	for i := 0; i < n; i++ {
-		a := vertices[i]
-		b := vertices[(i+1)%n]
+	for _, axis := range axes {
+		minP, maxP := projectPolygon(axis, p.WorldVertices)
+		projC := dot(axis, notamath.Vec2{X: center.X, Y: center.Y})
+		minC := projC - c.WorldRadius()
+		maxC := projC + c.WorldRadius()
 
-		closest := closestPointOnSegment(a, b, center)
-
-		if center.DistanceSquared(closest) <= r2 {
-			return true
+		overlap := getOverlap(minP, maxP, minC, maxC)
+		if overlap <= 0 {
+			return false, notamath.Vec2{}
+		}
+		if overlap < minOverlap {
+			minOverlap = overlap
+			smallestAxis = axis
 		}
 	}
 
-	if pointInPolygon(center, vertices) {
-		return true
+	dir := p.WorldVertices[0].Sub(center)
+	if dot(dir, smallestAxis) < 0 {
+		smallestAxis = smallestAxis.Neg()
 	}
 
-	return false
+	return true, smallestAxis.Mul(minOverlap)
 }
 
-//HELPERS
-
-const epsilon float32 = 1e-6
-
-func segmentsIntersect(p1, p2, q1, q2 notamath.Po2) bool {
-	o1 := notamath.Orient(p1, p2, q1)
-	o2 := notamath.Orient(p1, p2, q2)
-	o3 := notamath.Orient(q1, q2, p1)
-	o4 := notamath.Orient(q1, q2, p2)
-
-	// Proper intersection
-	if o1*o2 < 0 && o3*o4 < 0 {
-		return true
-	}
-
-	// Collinear cases
-	if almostZero(o1) && onSegment(p1, p2, q1) {
-		return true
-	}
-	if almostZero(o2) && onSegment(p1, p2, q2) {
-		return true
-	}
-	if almostZero(o3) && onSegment(q1, q2, p1) {
-		return true
-	}
-	if almostZero(o4) && onSegment(q1, q2, p2) {
-		return true
-	}
-
-	return false
-}
-
-func almostZero(v float32) bool {
-	if v < 0 {
-		return -v < epsilon
-	}
-	return v < epsilon
-}
-
-func onSegment(a, b, p notamath.Po2) bool {
-	return p.X >= min(a.X, b.X)-epsilon &&
-		p.X <= max(a.X, b.X)+epsilon &&
-		p.Y >= min(a.Y, b.Y)-epsilon &&
-		p.Y <= max(a.Y, b.Y)+epsilon
-}
-
-func pointInPolygon(point notamath.Po2, poly []notamath.Po2) bool {
-	inside := false
-	n := len(poly)
-
-	for i := 0; i < n; i++ {
-		j := (i + n - 1) % n
-
-		pi := poly[i]
-		pj := poly[j]
-
-		intersect := ((pi.Y > point.Y) != (pj.Y > point.Y)) &&
-			(point.X < (pj.X-pi.X)*(point.Y-pi.Y)/(pj.Y-pi.Y)+pi.X)
-
-		if intersect {
-			inside = !inside
-		}
-	}
-
-	return inside
-}
-
-func closestPointOnSegment(a, b notamath.Po2, p notamath.Po2) notamath.Po2 {
-	ab := b.Sub(a)
-	ap := p.Sub(a)
-
-	t := ap.Dot(ab) / ab.LenSquared()
-
-	if t < 0 {
-		t = 0
-	} else if t > 1 {
-		t = 1
-	}
-
-	return notamath.Po2{
-		X: a.X + ab.X*t,
-		Y: a.Y + ab.Y*t,
-	}
+// SetMaximumMTVTravelDistance sets the maximum travel distance for the MTV calculation per frame. the default is 1.0
+// Use at your own risk, numbers too high or too low may cause instability
+func SetMaximumMTVTravelDistance(amount float32) {
+	mTVTravelDistance = amount
 }
