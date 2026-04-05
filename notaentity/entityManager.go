@@ -188,14 +188,14 @@ func (em *EntityManager) CreateEntity(id string) *Entity {
 	return e
 }
 
-// SubmitMove queues up a movement request to the manager.
+// submitMove queues up a movement request to the manager.
 // Actual movement happens when the entity manager is flushed.
 //
 // This batching approach allows for bulk SIMD operations
 // which reduces CPU cost compared to per-entity updates.
 //
 // Submitting is recommended inside a fast loop (≈60Hz+).
-func (em *EntityManager) SubmitMove(index int, delta notamath.Vec2) {
+func (em *EntityManager) submitMove(index int, delta notamath.Vec2) {
 
 	for {
 		oldTransforms := em.transforms.Get()
@@ -224,13 +224,13 @@ func (em *EntityManager) SubmitMove(index int, delta notamath.Vec2) {
 	}
 }
 
-// SubmitRotation queues up a rotation request to the manager.
+// submitRotation queues up a rotation request to the manager.
 // Rotation uses radians, not degrees.
 //
 // Actual rotation happens when the manager is flushed.
 //
 // Submitting is recommended inside a fast loop (120Hz+).
-func (em *EntityManager) SubmitRotation(index int, rad float32) {
+func (em *EntityManager) submitRotation(index int, rad float32) {
 
 	for {
 		oldTransforms := em.transforms.Get()
@@ -257,7 +257,7 @@ func (em *EntityManager) SubmitRotation(index int, rad float32) {
 	}
 }
 
-// SubmitScale queues up a scale request to the manager.
+// submitScale queues up a scale request to the manager.
 //
 // Scaling is multiplicative, not additive.
 // Example:
@@ -266,7 +266,7 @@ func (em *EntityManager) SubmitRotation(index int, rad float32) {
 // Actual scaling happens when the manager is flushed.
 //
 // Submitting is recommended inside a fast loop (≈60Hz+).
-func (em *EntityManager) SubmitScale(index int, factor notamath.Vec2) {
+func (em *EntityManager) submitScale(index int, factor notamath.Vec2) {
 
 	for {
 		oldTransforms := em.transforms.Get()
@@ -299,7 +299,6 @@ func (em *EntityManager) SubmitScale(index int, factor notamath.Vec2) {
 //
 // Typically called once per frame before running collision detection or drawing.
 func (em *EntityManager) Flush() {
-
 	em.flushEntities()
 	em.flushColliders()
 }

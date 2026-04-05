@@ -73,21 +73,21 @@ func (e *Entity) Move(delta notamath.Vec2) {
 	if !e.Active.Get() {
 		return
 	}
-	e.manager.SubmitMove(e.index, delta)
+	e.manager.submitMove(e.index, delta)
 }
 
 func (e *Entity) Rotate(rad float32) {
 	if !e.Active.Get() {
 		return
 	}
-	e.manager.SubmitRotation(e.index, rad)
+	e.manager.submitRotation(e.index, rad)
 }
 
 func (e *Entity) Scale(factor notamath.Vec2) {
 	if !e.Active.Get() {
 		return
 	}
-	e.manager.SubmitScale(e.index, factor)
+	e.manager.submitScale(e.index, factor)
 }
 
 func (e *Entity) Position() notamath.Vec2 {

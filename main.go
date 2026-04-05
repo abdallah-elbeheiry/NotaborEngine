@@ -176,7 +176,6 @@ func main() {
 		em.SolveGroupCollision("group1")
 		collision, mtv := em.CollidesMTV(entity, entity1)
 		if collision {
-			//err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
 			val.Set(val.Get() * -1)
 			entity.Move(mtv)
 		}
