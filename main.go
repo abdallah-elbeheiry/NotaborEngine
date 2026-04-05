@@ -69,7 +69,7 @@ func main() {
 		fmt.Println(err)
 	}
 
-	entity := em.CreateEntity("quad", "Test Quad").
+	entity := em.CreateEntity("quad").
 		WithSprite(sprite).
 		WithCollider(notacollision.NewPolygonCollider(rect.Points)).WithShader(shader).
 		WithColor(notacolor.White)
@@ -77,7 +77,7 @@ func main() {
 	// Static walls
 	rect1 := notageometry.CreateRectangle(0.2, 2)
 	sprite1 := &notatexture.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
-	entity1 := em.CreateEntity("wall", "Test Wall").
+	entity1 := em.CreateEntity("wall").
 		WithPolygon(rect1).
 		WithCollider(notacollision.NewPolygonCollider(rect1.Points)).
 		WithSprite(sprite1).
@@ -85,11 +85,16 @@ func main() {
 	entity1.Move(notamath.Vec2{X: 1, Y: 0})
 
 	rect2 := notageometry.CreateRectangle(0.2, 2)
-	entity2 := em.CreateEntity("wall2", "Test Wall").
+	entity2 := em.CreateEntity("wall2").
 		WithPolygon(rect2).
 		WithCollider(notacollision.NewPolygonCollider(rect2.Points)).
 		WithColor(notacolor.Red).WithShader(shader)
 	entity2.Move(notamath.Vec2{X: -1, Y: 0})
+
+	em.AddToCollisionGroup("group0", entity)
+	em.AddToCollisionGroup("group0", entity1)
+	em.AddToCollisionGroup("group1", entity)
+	em.AddToCollisionGroup("group1", entity2)
 
 	em.Flush()
 
@@ -148,11 +153,13 @@ func main() {
 		deltaMove = notamath.Vec2{} // reset
 		return nil
 	}))
-	val := 1.0
+	val := float32(1)
 	logicLoop.Add(notatask.CreateTask(func() error {
-		entity.Move(notamath.Vec2{X: float32(0.001 * val), Y: 0})
-		entity.Rotate(float32(0.001 * val))
+		entity.Move(notamath.Vec2{X: 0.001 * val, Y: 0})
+		entity.Rotate(0.001 * val)
 		em.Flush()
+		em.SolveGroupCollision("group0")
+		em.SolveGroupCollision("group1")
 		if entity.CollidesWith(entity1) || entity.CollidesWith(entity2) {
 			//err := engine.SoundManager.Play("ding.mp3", notasound.MP3, 1, false)
 			if err != nil {
@@ -184,6 +191,10 @@ func main() {
 		return nil
 	}, notatask.RepeatEvery(time.Second*2))
 
+	logicLoop.Add(notatask.CreateTask(func() error {
+		em.Flush()
+		return nil
+	}))
 	logicLoop.Add(incrementTask)
 	logicLoop.Add(printLoopTask)
 	// END OF GAME LOGIC

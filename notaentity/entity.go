@@ -12,8 +12,7 @@ import (
 )
 
 type Entity struct {
-	ID   string
-	Name string
+	ID string
 
 	index   int
 	manager *EntityManager
@@ -31,10 +30,9 @@ type Entity struct {
 	lastSubmittedFrame notatomic.UInt64
 }
 
-func newEntity(id, name string, index int, manager *EntityManager) *Entity {
+func newEntity(id string, index int, manager *EntityManager) *Entity {
 	e := &Entity{
 		ID:      id,
-		Name:    name,
 		index:   index,
 		manager: manager,
 	}
@@ -93,15 +91,15 @@ func (e *Entity) Scale(factor notamath.Vec2) {
 }
 
 func (e *Entity) Position() notamath.Vec2 {
-	return e.manager.GetPosition(e.index)
+	return e.manager.getPositionIndex(e.index)
 }
 
 func (e *Entity) Rotation() float32 {
-	return e.manager.GetRotation(e.index)
+	return e.manager.getRotationIndex(e.index)
 }
 
 func (e *Entity) ScaleValue() notamath.Vec2 {
-	return e.manager.GetScale(e.index)
+	return e.manager.getScaleIndex(e.index)
 }
 
 func (e *Entity) Draw(renderer *notarender.Renderer, alpha float32) error {
@@ -121,9 +119,9 @@ func (e *Entity) Draw(renderer *notarender.Renderer, alpha float32) error {
 		}
 	}
 
-	pos := e.manager.GetPosition(e.index)
-	scale := e.manager.GetScale(e.index)
-	rot := e.manager.GetRotation(e.index)
+	pos := e.manager.getPositionIndex(e.index)
+	scale := e.manager.getScaleIndex(e.index)
+	rot := e.manager.getRotationIndex(e.index)
 
 	transform := notamath.Transform2D{
 		Position: pos,
@@ -157,9 +155,9 @@ func (e *Entity) updateCollider() {
 		return
 	}
 
-	pos := e.manager.GetPosition(e.index)
-	rot := e.manager.GetRotation(e.index)
-	scale := e.manager.GetScale(e.index)
+	pos := e.manager.getPositionIndex(e.index)
+	rot := e.manager.getRotationIndex(e.index)
+	scale := e.manager.getScaleIndex(e.index)
 
 	t := notamath.Transform2D{}
 	t.SetPosition(pos)
@@ -171,12 +169,9 @@ func (e *Entity) updateCollider() {
 }
 
 func (e *Entity) CollidesWith(other *Entity) bool {
-	c1 := e.Collider.Get()
-	c2 := other.Collider.Get()
+	return e.manager.collisionResults.Get().pairs[e.index][other.index]
+}
 
-	if c1 == nil || c2 == nil {
-		return false
-	}
-
-	return notacollision.Intersects(*c1, *c2)
+func (e *Entity) GetId() string {
+	return e.ID
 }
