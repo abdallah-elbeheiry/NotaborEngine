@@ -7,6 +7,8 @@ import (
 
 type ActionBehavior int
 
+// Action behaviors are self-explanatory in function
+// they determine the Action's behavior based on the bound signal
 const (
 	RunWhileHeld ActionBehavior = iota
 	RunWhileToggled
@@ -16,6 +18,8 @@ const (
 	Ignore
 )
 
+// Action is a struct that represents an action that can be bound to an input signal
+// An action can contain multiple Tasks, when active all tasks are sent to the loop provided by input manager
 type Action struct {
 	signal       *InputSignal
 	Toggled      bool
@@ -31,7 +35,7 @@ type Action struct {
 	tasks []*notatask.Task
 }
 
-// RunWhenShould checks if the action should run and schedules its tasks
+// RunWhenShould checks if the action should run and schedules its tasks accordingly
 func (a *Action) RunWhenShould(loop *notatask.Loop) bool {
 	a.shouldToggle()
 	a.updateHoldInformation()
@@ -90,7 +94,7 @@ func (a *Action) AddTask(t *notatask.Task) {
 	a.tasks = append(a.tasks, t)
 }
 
-// BindSignal binds an input signal to this action
-func (a *Action) BindSignal(sig *InputSignal) {
+// bindSignal binds an input signal to this action
+func (a *Action) bindSignal(sig *InputSignal) {
 	a.signal = sig
 }

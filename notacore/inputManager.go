@@ -531,7 +531,7 @@ func (im *InputManager) BindAction(sig *InputSignal, action *Action) {
 		im.signalToAction = make(map[*InputSignal][]*Action)
 	}
 
-	action.BindSignal(sig)
+	action.bindSignal(sig)
 	im.signalToAction[sig] = append(im.signalToAction[sig], action)
 }
 
