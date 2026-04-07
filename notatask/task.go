@@ -59,7 +59,7 @@ func CreateTask(fn func() error, opts ...TaskOption) *Task {
 			t.lastRun = nowUnix // start counting intervals after the delay
 		}
 
-		// Tick delay
+		// tick delay
 		if t.tickDelay > 0 {
 			t.tickDelay--
 			return nil

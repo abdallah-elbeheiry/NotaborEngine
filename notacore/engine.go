@@ -51,7 +51,7 @@ func (e *Engine) Run() error {
 		e.WindowManager.PollEvents()
 
 		if e.InputManager != nil {
-			e.InputManager.CaptureInputs(e.Windows)
+			e.InputManager.captureInputs(e.Windows)
 		}
 
 		now := time.Now()
@@ -92,7 +92,7 @@ func (e *Engine) SetInputFrequency(Hz float32) {
 		if e.InputManager == nil {
 			return errors.New("InputManager is not initialized, initialize it first")
 		}
-		e.InputManager.Tick()
+		e.InputManager.tick()
 		return nil
 	}))
 }

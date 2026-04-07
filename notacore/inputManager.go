@@ -417,9 +417,9 @@ type InputManager struct {
 	loop   *notatask.Loop
 }
 
-// UpdateSignals should be called once per logic tick (Loop).
+// updateSignals should be called once per logic tick (Loop).
 // It snapshots last state and applies the latest captured state.
-func (im *InputManager) UpdateSignals() {
+func (im *InputManager) updateSignals() {
 	im.mu.RLock()
 	defer im.mu.RUnlock()
 
@@ -488,7 +488,7 @@ func connectedGamepads() []*glfw.GamepadState {
 	}
 	return gamepads
 }
-func (im *InputManager) CaptureInputs(windows []*Window) {
+func (im *InputManager) captureInputs(windows []*Window) {
 	im.mu.Lock()
 	defer im.mu.Unlock()
 
@@ -509,6 +509,8 @@ func (im *InputManager) CaptureInputs(windows []*Window) {
 	}
 }
 
+// BindInput binds a hardware input to a signal, when a hardware button activates the signal updates its values accordingly
+// a single hardware input can be bound to multiple different signals
 func (im *InputManager) BindInput(input Input, sig *InputSignal) {
 	if im.inputToSignal == nil {
 		im.inputToSignal = make(map[Input][]*InputSignal)
@@ -519,19 +521,8 @@ func (im *InputManager) BindInput(input Input, sig *InputSignal) {
 	}
 }
 
-func (im *InputManager) Tick() {
-	im.UpdateSignals()
-
-	im.mu.RLock()
-	defer im.mu.RUnlock()
-
-	for _, actions := range im.signalToAction {
-		for _, action := range actions {
-			action.RunWhenShould(im.loop)
-		}
-	}
-}
-
+// BindAction binds an input signal to an action, when a signal reaches a specific state provided by the action, it activates
+// a single input signal can be bound to multiple actions
 func (im *InputManager) BindAction(sig *InputSignal, action *Action) {
 	im.mu.Lock()
 	defer im.mu.Unlock()
@@ -542,4 +533,17 @@ func (im *InputManager) BindAction(sig *InputSignal, action *Action) {
 
 	action.BindSignal(sig)
 	im.signalToAction[sig] = append(im.signalToAction[sig], action)
+}
+
+func (im *InputManager) tick() {
+	im.updateSignals()
+
+	im.mu.RLock()
+	defer im.mu.RUnlock()
+
+	for _, actions := range im.signalToAction {
+		for _, action := range actions {
+			action.RunWhenShould(im.loop)
+		}
+	}
 }
