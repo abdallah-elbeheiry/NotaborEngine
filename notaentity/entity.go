@@ -69,6 +69,7 @@ func (e *Entity) WithColor(c notacolor.Color) *Entity {
 	return e
 }
 
+// Move moves an entity by a vector amount, movement is additively applied
 func (e *Entity) Move(delta notamath.Vec2) {
 	if !e.Active.Get() {
 		return
@@ -76,6 +77,7 @@ func (e *Entity) Move(delta notamath.Vec2) {
 	e.manager.submitMove(e.index, delta)
 }
 
+// Rotate rotates an entity by an amount (radians), rotating is additively applied
 func (e *Entity) Rotate(rad float32) {
 	if !e.Active.Get() {
 		return
@@ -83,6 +85,8 @@ func (e *Entity) Rotate(rad float32) {
 	e.manager.submitRotation(e.index, rad)
 }
 
+// Scale scales an entity by an amount, scaling is multiplicatively applied
+// scale vectors scales horizontally and vertically according to the vector's x and y values
 func (e *Entity) Scale(factor notamath.Vec2) {
 	if !e.Active.Get() {
 		return
@@ -90,18 +94,24 @@ func (e *Entity) Scale(factor notamath.Vec2) {
 	e.manager.submitScale(e.index, factor)
 }
 
+// Position gets the current position of the entity
 func (e *Entity) Position() notamath.Vec2 {
 	return e.manager.getPositionIndex(e.index)
 }
 
+// Rotation gets the current rotation degree of the entity (radians)
 func (e *Entity) Rotation() float32 {
 	return e.manager.getRotationIndex(e.index)
 }
 
+// ScaleValue gets the current relative scale of the entity
 func (e *Entity) ScaleValue() notamath.Vec2 {
 	return e.manager.getScaleIndex(e.index)
 }
 
+// Draw sends a draw request to the window's renderer and draws at the next tick
+// alpha is recommended to be provided by the loop (loop.Alpha(time.now())) if the object is dynamic, 1 is the object is stationary
+// the draw will happen on the window which the renderer belongs to
 func (e *Entity) Draw(renderer *notarender.Renderer, alpha float32) error {
 	if !e.Visible.Get() || !e.Active.Get() {
 		return nil
