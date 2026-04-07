@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/go-gl/gl/v4.6-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
@@ -32,6 +31,7 @@ type Engine struct {
 	running   bool
 }
 
+// Run activates all loops within all windows, it's recommended to use at the end of the engine configuration
 func (e *Engine) Run() error {
 	e.running = true
 
@@ -84,6 +84,7 @@ func (e *Engine) Run() error {
 	return nil
 }
 
+// SetInputFrequency sets the frequency of the input loop, which is responsible for hardware input detection
 func (e *Engine) SetInputFrequency(Hz float32) {
 	e.inputLoop = notatask.CreateLoop(Hz)
 	e.InputManager.loop = e.inputLoop
@@ -96,6 +97,7 @@ func (e *Engine) SetInputFrequency(Hz float32) {
 	}))
 }
 
+// AllWindowsClosed returns true if all windows are closed
 func (e *Engine) AllWindowsClosed() bool {
 	for _, w := range e.Windows {
 		if !w.ShouldClose() {
@@ -105,6 +107,7 @@ func (e *Engine) AllWindowsClosed() bool {
 	return true
 }
 
+// Shutdown shuts down the engine and releases all resources
 func (e *Engine) Shutdown() {
 	glfw.Terminate()
 }
@@ -137,15 +140,13 @@ func (e *Engine) initPlatform() error {
 	return nil
 }
 
+// CreateWindow creates a new window with the given configuration
 func (e *Engine) CreateWindow(cfg WindowConfig) (*Window, error) {
 	win, err := e.WindowManager.Create(cfg)
 	if err != nil {
 		return nil, err
 	}
 	win.MakeContextCurrent()
-	if err := gl.Init(); err != nil {
-		return nil, err
-	}
 	win.RunTime.backend.Init()
 	if e.settings.Vsync {
 		glfw.SwapInterval(1)
@@ -180,6 +181,9 @@ func addNativeDLLPath() error {
 	return nil
 }
 
+// CreateEngine creates a new engine instance with the given settings
+// The engine will be initialized with a sound manager, window manager, entity manager, and input manager ready to use
+// The engine automatically detects the OS and provides the ideal configuration files
 func CreateEngine(settings *Settings) (*Engine, error) {
 	audio, err := notasound.NewSoundManager()
 	if err != nil {

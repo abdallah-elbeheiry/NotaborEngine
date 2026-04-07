@@ -11,6 +11,7 @@ type PolygonCollider struct {
 	WorldVertices []notamath.Po2
 }
 
+// NewPolygonCollider creates a new PolygonCollider with the given points
 func NewPolygonCollider(points []notamath.Po2) *PolygonCollider {
 	return &PolygonCollider{
 		LocalVertices: points,
@@ -18,6 +19,7 @@ func NewPolygonCollider(points []notamath.Po2) *PolygonCollider {
 	}
 }
 
+// UpdateFromTransform updates the polygon's world vertices from the transform
 func (p *PolygonCollider) UpdateFromTransform(t *notamath.Transform2D) {
 	if len(p.WorldVertices) != len(p.LocalVertices) {
 		p.WorldVertices = make([]notamath.Po2, len(p.LocalVertices))
@@ -30,9 +32,9 @@ func (p *PolygonCollider) UpdateFromTransform(t *notamath.Transform2D) {
 	}
 }
 
-func (p *PolygonCollider) AABB() AABBCollider {
+func (p *PolygonCollider) aabb() aabbCollider {
 	if len(p.WorldVertices) == 0 {
-		return AABBCollider{}
+		return aabbCollider{}
 	}
 
 	minX := p.WorldVertices[0].X
@@ -56,7 +58,7 @@ func (p *PolygonCollider) AABB() AABBCollider {
 		}
 	}
 
-	return AABBCollider{
+	return aabbCollider{
 		Min: notamath.Vec2{X: minX, Y: minY},
 		Max: notamath.Vec2{X: maxX, Y: maxY},
 	}
@@ -66,8 +68,8 @@ func (p *PolygonCollider) GetWorldVertices() []notamath.Po2 {
 	return p.WorldVertices
 }
 
-// MTVPolygon computes the Minimum Translation Vector to separate two polygons
-func MTVPolygon(a, b *PolygonCollider) notamath.Vec2 {
+// mtvPolygon computes the Minimum Translation Vector to separate two polygons
+func mtvPolygon(a, b *PolygonCollider) notamath.Vec2 {
 	var MaxMTVPerFrame = mTVTravelDistance
 
 	if len(a.WorldVertices) == 0 || len(b.WorldVertices) == 0 {
@@ -96,7 +98,7 @@ func MTVPolygon(a, b *PolygonCollider) notamath.Vec2 {
 	}
 
 	// Compute centroids for direction
-	dir := a.GetCentroid().Sub(b.GetCentroid())
+	dir := a.centroid().Sub(b.centroid())
 	if dot(dir, smallestAxis) < 0 {
 		smallestAxis = smallestAxis.Neg()
 	}
@@ -112,7 +114,7 @@ func MTVPolygon(a, b *PolygonCollider) notamath.Vec2 {
 	return mtv
 }
 
-func (p *PolygonCollider) GetCentroid() notamath.Vec2 {
+func (p *PolygonCollider) centroid() notamath.Vec2 {
 	var cx, cy float32
 	n := len(p.WorldVertices)
 	for _, v := range p.WorldVertices {

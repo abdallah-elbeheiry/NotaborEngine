@@ -30,16 +30,17 @@ var (
 	Transparent = Color{0, 0, 0, 0}
 )
 
+// RGBA returns a new color with the given RGBA values.
 func RGBA(r, g, b, a float32) Color {
-	return Color{r, g, b, a}
-}
-func RGB(r, g, b float32) Color {
-	return RGBA(r, g, b, 1)
-}
-func FromBytes(r, g, b, a uint8) Color {
-	return RGBA(float32(r)/255, float32(g)/255, float32(b)/255, float32(a)/255)
+	return Color{r, g, b, a}.Clamp()
 }
 
+// RGB returns a new color with the given RGB values.
+func RGB(r, g, b float32) Color {
+	return RGBA(r, g, b, 1).Clamp()
+}
+
+// FromHex parses a hex color string and returns a Color.
 func FromHex(hex string) (Color, error) {
 	s := strings.TrimPrefix(hex, "#")
 
@@ -78,10 +79,12 @@ func FromHex(hex string) (Color, error) {
 	return color.Clamp(), nil
 }
 
+// WithAlpha returns a new color with the given alpha value.
 func (c Color) WithAlpha(a float32) Color {
 	return Color{c.R, c.G, c.B, a}
 }
 
+// Clamp returns a new color with values clamped to [0, 1].
 func (c Color) Clamp() Color {
 	if c.R < 0 {
 		c.R = 0
@@ -110,10 +113,12 @@ func (c Color) Clamp() Color {
 	return c
 }
 
+// ToVec4 returns the color as a [4]float32.
 func (c Color) ToVec4() [4]float32 {
 	return [4]float32{c.R, c.G, c.B, c.A}
 }
 
+// Lerp returns a new color that is the linear interpolation of the two colors.
 func (c Color) Lerp(to Color, t float32) Color {
 	if t < 0 {
 		t = 0

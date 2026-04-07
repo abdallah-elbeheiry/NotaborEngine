@@ -10,6 +10,7 @@ type CircleCollider struct {
 	worldRadius float32
 }
 
+// NewCircleCollider creates a new CircleCollider with the given center and radius
 func NewCircleCollider(center notamath.Po2, radius float32) *CircleCollider {
 	return &CircleCollider{
 		LocalCenter: center,
@@ -17,6 +18,7 @@ func NewCircleCollider(center notamath.Po2, radius float32) *CircleCollider {
 	}
 }
 
+// UpdateFromTransform updates the collider's world position and radius based on the given transform
 func (c *CircleCollider) UpdateFromTransform(t *notamath.Transform2D) {
 	c.worldCenter = t.TransformPoint(c.LocalCenter)
 
@@ -24,8 +26,8 @@ func (c *CircleCollider) UpdateFromTransform(t *notamath.Transform2D) {
 	c.worldRadius = c.LocalRadius * avgScale
 }
 
-func (c *CircleCollider) AABB() AABBCollider {
-	return AABBCollider{
+func (c *CircleCollider) aabb() aabbCollider {
+	return aabbCollider{
 		Min: notamath.Vec2{
 			X: c.worldCenter.X - c.worldRadius,
 			Y: c.worldCenter.Y - c.worldRadius,

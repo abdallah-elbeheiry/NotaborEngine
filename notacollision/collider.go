@@ -5,31 +5,35 @@ import (
 	"math"
 )
 
-type AABBCollider struct {
+// aabbCollider is a minimal bounding box collider used for broad phase checks
+type aabbCollider struct {
 	Min notamath.Vec2
 	Max notamath.Vec2
 }
 
 var mTVTravelDistance float32 = 1.0
 
+// Collider is an interface implemented by polygon collider and circular collider
 type Collider interface {
-	AABB() AABBCollider
+	aabb() aabbCollider
 	UpdateFromTransform(t *notamath.Transform2D)
 }
 
-func BroadPhase(a, b Collider) bool {
-	return AABBIntersects(a.AABB(), b.AABB())
+func broadPhase(a, b Collider) bool {
+	return aabbIntersects(a.aabb(), b.aabb())
 }
 
-func AABBIntersects(a, b AABBCollider) bool {
+func aabbIntersects(a, b aabbCollider) bool {
 	return a.Min.X <= b.Max.X &&
 		a.Max.X >= b.Min.X &&
 		a.Min.Y <= b.Max.Y &&
 		a.Max.Y >= b.Min.Y
 }
 
-func IntersectsMTV(a, b Collider) (bool, notamath.Vec2) {
-	if !BroadPhase(a, b) {
+// Intersects finds whether two colliders are intersecting or not, colliders can be polygon shaped or cirular
+// Return whether colliders intersect or not and minimum translation vector (MTV)
+func Intersects(a, b Collider) (bool, notamath.Vec2) {
+	if !broadPhase(a, b) {
 		return false, notamath.Vec2{}
 	}
 
@@ -55,7 +59,7 @@ func IntersectsMTV(a, b Collider) (bool, notamath.Vec2) {
 }
 
 func polygonVsPolygonMTV(a, b *PolygonCollider) (bool, notamath.Vec2) {
-	mtv := MTVPolygon(a, b)
+	mtv := mtvPolygon(a, b)
 	if mtv.X == 0 && mtv.Y == 0 {
 		return false, notamath.Vec2{}
 	}

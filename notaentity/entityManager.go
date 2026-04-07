@@ -642,7 +642,7 @@ func (em *EntityManager) SolveGroupCollision(id string) {
 				continue
 			}
 
-			_, mtv := notacollision.IntersectsMTV(*c1, *c2)
+			_, mtv := notacollision.Intersects(*c1, *c2)
 			if mtv != (notamath.Vec2{}) {
 				if newPairs[i] == nil {
 					newPairs[i] = make(map[int]notamath.Vec2)
