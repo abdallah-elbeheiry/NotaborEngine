@@ -38,11 +38,13 @@ func NewSoundManager() (*SoundManager, error) {
 	}, nil
 }
 
+// SetSoundsFolder configures the base folder used by Play when resolving sound file names.
 func (m *SoundManager) SetSoundsFolder(path string) {
 	m.soundsFolder = path
 	m.folderGiven = true
 }
 
+// Play starts a sound if it is not already active.
 func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, loop bool) error {
 	if !m.folderGiven {
 		return errors.New("SoundManager: sounds folder not set")
@@ -74,15 +76,17 @@ func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, lo
 			soundVolume = 0
 		}
 		p := play(m.ctx, s, soundVolume)
-		m.activeSounds.Store(sound, &activeTrack{
+		track := &activeTrack{
 			player:      p,
 			localVolume: volume,
-		})
-		m.activeSounds.Store(sound, p)
+		}
+		m.activeSounds.Store(sound, track)
 
 		if loop {
 			for {
-				if _, stillActive := m.activeSounds.Load(sound); !stillActive {
+				val, stillActive := m.activeSounds.Load(sound)
+				if !stillActive || val != track {
+					closePlayer(track.player)
 					return
 				}
 
@@ -93,20 +97,28 @@ func (m *SoundManager) Play(sound string, format AudioFormat, volume float32, lo
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
+
+		for p.IsPlaying() {
+			time.Sleep(10 * time.Millisecond)
+		}
+		m.removeTrack(sound, track)
 	}()
 	return nil
 }
 
+// Stop halts a playing sound and releases its active playback state.
 func (m *SoundManager) Stop(sound string) {
 	if val, ok := m.activeSounds.Load(sound); ok {
 		if track, ok := val.(*activeTrack); ok {
 			track.player.Pause()
 			_, _ = track.player.Seek(0, 0)
+			closePlayer(track.player)
 		}
 		m.activeSounds.Delete(sound)
 	}
 }
 
+// UpdateLiveVolume reapplies master and mute state to all currently playing sounds.
 func (m *SoundManager) UpdateLiveVolume() {
 	m.activeSounds.Range(func(key, value any) bool {
 		if track, ok := value.(*activeTrack); ok {
@@ -118,4 +130,23 @@ func (m *SoundManager) UpdateLiveVolume() {
 		}
 		return true
 	})
+}
+
+func (m *SoundManager) removeTrack(sound string, track *activeTrack) {
+	if current, ok := m.activeSounds.Load(sound); ok && current == track {
+		m.activeSounds.Delete(sound)
+	}
+	closePlayer(track.player)
+}
+
+func closePlayer(player *oto.Player) {
+	if player == nil {
+		return
+	}
+	type closer interface {
+		Close() error
+	}
+	if c, ok := any(player).(closer); ok {
+		_ = c.Close()
+	}
 }

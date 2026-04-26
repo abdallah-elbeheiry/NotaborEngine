@@ -7,18 +7,21 @@ import (
 	"NotaborEngine/notashader"
 	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
+	"sync"
 	"unsafe"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
 )
 
 type Renderer struct {
+	mu     sync.Mutex
 	Orders []DrawOrder
 
 	FrameID notatomic.UInt64
 
-	currentShader  *notashader.Shader
-	currentTexture *notatexture.Texture
+	currentShader   *notashader.Shader
+	currentTexture  *notatexture.Texture
+	currentMaterial *notashader.Material
 
 	DefaultShader *notashader.Shader
 }
@@ -78,7 +81,7 @@ func BuildPolygonRenderData(poly *notageometry.Polygon, color notacolor.Color) *
 }
 
 // SubmitPolygon transforms and queues polygon for rendering
-func (r *Renderer) SubmitPolygon(poly *notageometry.Polygon, model notamath.Mat3, color notacolor.Color, tex *notatexture.Texture, shader *notashader.Shader) {
+func (r *Renderer) SubmitPolygon(poly *notageometry.Polygon, model notamath.Mat3, color notacolor.Color, tex *notatexture.Texture, shader *notashader.Shader, material *notashader.Material) {
 	renderData := BuildPolygonRenderData(poly, color)
 	if renderData == nil {
 		return
@@ -93,10 +96,13 @@ func (r *Renderer) SubmitPolygon(poly *notageometry.Polygon, model notamath.Mat3
 		return
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.Orders = append(r.Orders, DrawOrder{
 		Vertices: tris,
 		Texture:  tex,
 		Shader:   shader,
+		Material: material,
 	})
 }
 
@@ -152,6 +158,7 @@ func (b *GLBackend) BindVao() {
 // Draw batch structure
 type drawBatch struct {
 	shader     *notashader.Shader
+	material   *notashader.Material
 	texture    *notatexture.Texture
 	startIndex int
 	vertCount  int
@@ -159,9 +166,16 @@ type drawBatch struct {
 
 // Flush submits all queued orders and clears them
 func (r *Renderer) Flush(backend *GLBackend) {
+	r.mu.Lock()
 	if len(r.Orders) == 0 {
+		r.mu.Unlock()
 		return
 	}
+
+	orders := make([]DrawOrder, len(r.Orders))
+	copy(orders, r.Orders)
+	r.Orders = r.Orders[:0]
+	r.mu.Unlock()
 
 	// Clear once per frame
 	gl.ClearColor(0, 0, 0, 1)
@@ -174,16 +188,24 @@ func (r *Renderer) Flush(backend *GLBackend) {
 	var batches []drawBatch
 	var current *drawBatch
 
-	for _, order := range r.Orders {
+	for _, order := range orders {
 		shader := order.Shader
+		material := order.Material
+		if material != nil && material.Shader != nil {
+			shader = material.Shader
+		}
 		if shader == nil {
 			shader = r.DefaultShader
 		}
 
-		canBatch := current != nil && current.shader == shader && current.texture == order.Texture
+		canBatch := current != nil &&
+			current.shader == shader &&
+			current.material == material &&
+			current.texture == order.Texture
 		if !canBatch {
 			batches = append(batches, drawBatch{
 				shader:     shader,
+				material:   material,
 				texture:    order.Texture,
 				startIndex: len(backend.batchBuffer),
 				vertCount:  0,
@@ -202,18 +224,30 @@ func (r *Renderer) Flush(backend *GLBackend) {
 
 	// Draw batches
 	for _, batch := range batches {
-		if batch.shader != r.currentShader {
+		if batch.material != nil {
+			if batch.material != r.currentMaterial || batch.texture != r.currentTexture {
+				batch.material.Apply(batch.texture != nil)
+				r.currentMaterial = batch.material
+				r.currentShader = batch.material.Shader
+			}
+		} else if batch.shader != r.currentShader {
 			batch.shader.Bind()
 			r.currentShader = batch.shader
+			r.currentMaterial = nil
 		}
 
 		if batch.texture != r.currentTexture {
 			if batch.texture != nil {
-				batch.shader.SetUniform(notashader.UseTexture, true)
+				if batch.material == nil {
+					batch.shader.SetUniform(notashader.UseTexture, true)
+					batch.shader.SetUniform(notashader.TextureBind, int32(0))
+				}
 				gl.ActiveTexture(gl.TEXTURE0)
 				gl.BindTexture(gl.TEXTURE_2D, batch.texture.ID)
 			} else {
-				batch.shader.SetUniform(notashader.UseTexture, false)
+				if batch.material == nil {
+					batch.shader.SetUniform(notashader.UseTexture, false)
+				}
 			}
 			r.currentTexture = batch.texture
 		}

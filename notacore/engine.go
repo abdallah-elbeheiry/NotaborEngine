@@ -66,8 +66,6 @@ func (e *Engine) Run() error {
 				time.Sleep(rt.targetDt - elapsed)
 				continue
 			}
-			rt.lastRender = now
-
 			win.MakeContextCurrent()
 			win.RunRenderer()
 			win.SwapBuffers()

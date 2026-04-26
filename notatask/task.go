@@ -1,34 +1,37 @@
 package notatask
 
 import (
+	"sync/atomic"
 	"time"
 )
 
 type Task struct {
-	fn      func() error              // 8 bytes
-	cond    func() bool               // 8 bytes
-	runFunc func(now time.Time) error // 8 bytes
+	fn   func()
+	cond func() bool
 
-	// int64 is used for UnixNano
-	lastRun  int64 // 8 bytes
-	finishAt int64 // 8 bytes
+	// int64 for UnixNano
+	lastRun  int64
+	finishAt int64
 
-	interval  int64 // 8 bytes
-	timeDelay int64 // 8 bytes
+	interval  int64
+	timeDelay int64
 
-	tickDelay uint32 // 4 bytes
-	tickCount uint32 // 4 bytes
-	maxRuns   uint32 // 4 bytes
+	tickDelay uint32
+	tickCount uint32
+	maxRuns   uint32
 
-	// total: 68 bytes (rounds to 72 bytes due to fields)
+	canceled      atomic.Uint32
+	delayConsumed bool
+	done          bool
+	err           error // set by run when task is done or errored
 }
 
 // TaskOption configures a Task at creation time.
 type TaskOption func(*Task)
 
-// CreateTask creates a task with a dynamically generated runFunc.
+// CreateTask creates a task.
 // All configuration is done through TaskOption functions.
-func CreateTask(fn func() error, opts ...TaskOption) *Task {
+func CreateTask(fn func(), opts ...TaskOption) *Task {
 	t := &Task{
 		fn:      fn,
 		lastRun: time.Now().UnixNano(),
@@ -39,58 +42,115 @@ func CreateTask(fn func() error, opts ...TaskOption) *Task {
 		opt(t)
 	}
 
-	// Keep track if initial delay is consumed
-	var delayConsumed bool
+	return t
+}
 
-	t.runFunc = func(now time.Time) error {
-		nowUnix := now.UnixNano()
+func Do(fn func()) *Task {
+	return CreateTask(fn)
+}
 
-		// 1️FinishAfter: hard stop
-		if t.finishAt != 0 && nowUnix >= t.finishAt {
-			return ErrDone
-		}
+func Once(fn func()) *Task {
+	return CreateTask(fn, RunOnce())
+}
 
-		// Initial delay: only skip once
-		if !delayConsumed && t.timeDelay != 0 {
-			if nowUnix-t.lastRun < t.timeDelay {
-				return nil
-			}
-			delayConsumed = true
-			t.lastRun = nowUnix // start counting intervals after the delay
-		}
+func Every(d time.Duration, fn func()) *Task {
+	return CreateTask(fn, RepeatEvery(d))
+}
 
-		// tick delay
-		if t.tickDelay > 0 {
-			t.tickDelay--
-			return nil
-		}
+func Times(n uint32, fn func()) *Task {
+	return CreateTask(fn, RepeatTimes(n))
+}
 
-		// Interval check (regular periodic execution)
-		if t.interval != 0 && nowUnix-t.lastRun < t.interval {
-			return nil
-		}
+func After(d time.Duration, fn func()) *Task {
+	return CreateTask(fn, WithDelay(d))
+}
 
-		// Execute task
-		if err := t.fn(); err != nil {
-			return err
-		}
+func AfterTicks(count uint32, fn func()) *Task {
+	return CreateTask(fn, StartAfterTicks(count))
+}
 
-		t.lastRun = nowUnix
-		t.tickCount++
-
-		// Max runs
-		if t.maxRuns != 0 && t.tickCount >= t.maxRuns {
-			return ErrDone
-		}
-
-		// Conditional stop
-		if t.cond != nil && t.cond() {
-			return ErrDone
-		}
-
-		return nil
+func (t *Task) run(nowUnix int64) {
+	if t.canceled.Load() != 0 {
+		t.done = true
+		t.err = ErrDone
+		return
 	}
 
+	if t.finishAt != 0 && nowUnix >= t.finishAt {
+		t.done = true
+		t.err = ErrDone
+		return
+	}
+
+	if !t.delayConsumed && t.timeDelay != 0 {
+		if nowUnix-t.lastRun < t.timeDelay {
+			return
+		}
+		t.delayConsumed = true
+		t.lastRun = nowUnix
+	}
+
+	if t.tickDelay > 0 {
+		t.tickDelay--
+		return
+	}
+
+	if t.interval != 0 && nowUnix-t.lastRun < t.interval {
+		return
+	}
+
+	t.fn()
+	t.lastRun = nowUnix
+	t.tickCount++
+
+	if t.maxRuns != 0 && t.tickCount >= t.maxRuns {
+		t.done = true
+		t.err = ErrDone
+		return
+	}
+
+	if t.cond != nil && t.cond() {
+		t.done = true
+		t.err = ErrDone
+	}
+}
+
+func (t *Task) cancel() {
+	t.canceled.Store(1)
+}
+
+func (t *Task) Every(d time.Duration) *Task {
+	t.interval = int64(d)
+	return t
+}
+
+func (t *Task) Delay(d time.Duration) *Task {
+	t.timeDelay = int64(d)
+	return t
+}
+
+func (t *Task) AfterTicks(count uint32) *Task {
+	t.tickDelay = count
+	return t
+}
+
+func (t *Task) Times(n uint32) *Task {
+	t.maxRuns = n
+	return t
+}
+
+func (t *Task) Once() *Task {
+	t.maxRuns = 1
+	return t
+}
+
+func (t *Task) Until(cond func() bool) *Task {
+	t.cond = cond
+	return t
+}
+
+func (t *Task) FinishAfter(d time.Duration) *Task {
+	t.finishAt = time.Now().Add(d).UnixNano()
 	return t
 }
 

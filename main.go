@@ -1,22 +1,23 @@
 package main
 
 import (
-	"NotaborEngine/notacollision"
 	"NotaborEngine/notacolor"
 	"NotaborEngine/notacore"
+	"NotaborEngine/notaentity"
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
 	"NotaborEngine/notatask"
 	"NotaborEngine/notatomic"
 	"fmt"
 	"log"
+	"math"
 	"runtime"
 	"time"
 )
 
 func main() {
 	// START OF ENGINE SETUP
-	Settings := &notacore.Settings{Vsync: true, SoundLevel: 0.2, Muted: false}
+	Settings := &notacore.Settings{Vsync: true, SoundLevel: 1, Muted: false}
 	engine, err := notacore.CreateEngine(Settings)
 	if err != nil {
 		log.Fatal(err)
@@ -51,23 +52,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	win.Camera().SetZoom(1.0)
 	// END OF WINDOW CREATION
 
 	// START OF ENTITY CREATION
-	rect := notageometry.CreateRectangle(0.5, 0.5)
-	sprite, err := win.LoadSprite("quadSprite", "resources/images/hahaha.jpg", rect)
+	circleRadius := float32(0.25)
+	ballVisual, err := win.LoadVisual("quadSprite", "resources/images/hahaha.jpg", notacore.VisualOptions{
+		Width:        circleRadius * 2,
+		Height:       circleRadius * 2,
+		Mask:         notacore.MaskCircle,
+		CircleRadius: 0.5,
+		CircleEdge:   0.01,
+	})
+
 	if err != nil {
 		log.Fatal(err)
 	}
-	shader, err := win.LoadShader("basic", "notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
-
-	if err != nil {
-		fmt.Println(err)
-	}
 
 	entity := em.CreateEntity("quad").
-		WithSprite(sprite).
-		WithCollider(notacollision.NewPolygonCollider(rect.Points)).WithShader(shader).
+		WithVisual(ballVisual).
+		WithCollision(notaentity.CircleCollision(circleRadius)).
 		WithColor(notacolor.White)
 
 	// Static walls
@@ -76,22 +80,27 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	sprite1, err := win.CreateSprite("wallSprite", texture, rect1)
+	wallVisual, err := win.CreateVisual("wallSprite", texture, notacore.SpriteOptions(0.5, 2))
 	if err != nil {
 		log.Fatal(err)
 	}
 	entity1 := em.CreateEntity("wall").
 		WithPolygon(rect1).
-		WithCollider(notacollision.NewPolygonCollider(rect1.Points)).
-		WithSprite(sprite1).
-		WithColor(notacolor.Green).WithShader(shader)
+		WithVisual(wallVisual).
+		WithCollision(notaentity.PolygonCollision(rect1.Points)).
+		WithColor(notacolor.Green)
 	entity1.Move(notamath.Vec2{X: 1.15, Y: 0})
 
 	rect2 := notageometry.CreateRectangle(0.5, 2)
+	wallVisual2, err := win.CreateVisual("wallSprite2", texture, notacore.SpriteOptions(0.5, 2))
+	if err != nil {
+		log.Fatal(err)
+	}
 	entity2 := em.CreateEntity("wall2").
 		WithPolygon(rect2).
-		WithCollider(notacollision.NewPolygonCollider(rect2.Points)).
-		WithColor(notacolor.Red).WithShader(shader)
+		WithVisual(wallVisual2).
+		WithCollision(notaentity.PolygonCollision(rect2.Points)).
+		WithColor(notacolor.Red)
 	entity2.Move(notamath.Vec2{X: -1.15, Y: 0})
 
 	em.AddToCollisionGroup("group0", entity)
@@ -103,9 +112,8 @@ func main() {
 
 	// Add draw calls
 	drawingLoop.Do(func() {
-		err := entity.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
-		err = entity1.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
-		err = entity2.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
+		alpha := logicLoop.Alpha(time.Now())
+		err := win.Draw(alpha, nil, entity, entity1, entity2)
 		if err != nil {
 			panic(err)
 		}
@@ -118,12 +126,18 @@ func main() {
 	sigS := &notacore.InputSignal{}
 	sigD := &notacore.InputSignal{}
 	sigLeft := &notacore.InputSignal{}
+	sigZ := &notacore.InputSignal{}
+	sigX := &notacore.InputSignal{}
+	sigC := &notacore.InputSignal{}
 
 	im.BindInput(notacore.KeyW, sigW)
 	im.BindInput(notacore.KeyA, sigA)
 	im.BindInput(notacore.KeyS, sigS)
 	im.BindInput(notacore.KeyD, sigD)
 	im.BindInput(notacore.MouseLeft, sigLeft)
+	im.BindInput(notacore.KeyZ, sigZ)
+	im.BindInput(notacore.KeyX, sigX)
+	im.BindInput(notacore.KeyC, sigC)
 
 	// Actions
 	actW := &notacore.Action{Behavior: notacore.RunWhileHeld}
@@ -169,6 +183,7 @@ func main() {
 	})
 	val := notatomic.Float32{}
 	val.Set(1)
+
 	logicLoop.Do(func() {
 		entity.Move(notamath.Vec2{X: 0.001 * val.Get(), Y: 0})
 		entity.Rotate(0.001)
@@ -192,6 +207,7 @@ func main() {
 
 	lastTs := time.Now()
 	lastTickCount := logicLoop.TickCount()
+	scalePhase := float32(0)
 	printLoopTask := notatask.Every(time.Second*2, func() {
 		now := time.Now()
 		delta := now.Sub(lastTs).Seconds()
@@ -206,6 +222,17 @@ func main() {
 	logicLoop.Do(func() {
 		em.Flush()
 	})
+	logicLoop.Do(func() {
+		scalePhase += 0.0025
+		targetScale := 1.0 + 0.35*math32Sin(scalePhase)
+		currentScale := entity.ScaleValue()
+		if currentScale.X != 0 && currentScale.Y != 0 {
+			entity.Scale(notamath.Vec2{
+				X: targetScale / currentScale.X,
+				Y: targetScale / currentScale.Y,
+			})
+		}
+	})
 	logicLoop.Add(printLoopTask)
 	// END OF GAME LOGIC
 
@@ -213,4 +240,8 @@ func main() {
 	if err := engine.Run(); err != nil {
 		log.Fatal("Engine run failed:", err)
 	}
+}
+
+func math32Sin(x float32) float32 {
+	return float32(math.Sin(float64(x)))
 }

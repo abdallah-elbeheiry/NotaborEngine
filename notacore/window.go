@@ -2,6 +2,7 @@ package notacore
 
 import (
 	"NotaborEngine/notarender"
+	"NotaborEngine/notashader"
 	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
 	"errors"
@@ -33,20 +34,43 @@ type windowRunTime struct {
 	backend    *notarender.GLBackend
 	Renderer   *notarender.Renderer
 	TextureMgr *notatexture.TextureManager
+	SpriteMgr  *notatexture.SpriteManager
+	ShaderMgr  *notashader.Manager
+	Cameras    []*Camera2D
 }
 
 type Window struct {
-	ID      int
-	Handle  *glfw.Window
-	Config  WindowConfig
-	RunTime windowRunTime
+	ID            int
+	Handle        *glfw.Window
+	Config        WindowConfig
+	RunTime       windowRunTime
+	DefaultCamera *Camera2D
 }
 
 func (w *Window) GetConfig() *WindowConfig       { return &w.Config }
 func (w *Window) GetRuntime() *WindowBaseRuntime { return &w.RunTime.WindowBaseRuntime }
+
+// Camera returns the default camera.
+func (w *Window) Camera() *Camera2D { return w.DefaultCamera }
+
+// Cameras returns all cameras owned by this window.
+func (w *Window) Cameras() []*Camera2D { return w.RunTime.Cameras }
+
+// AddCamera adds a new camera to the window.
+func (w *Window) AddCamera(camera *Camera2D) {
+	w.RunTime.Cameras = append(w.RunTime.Cameras, camera)
+}
+
 func (w *Window) RunRenderer() {
 	rt := &w.RunTime.WindowBaseRuntime
-	rt.lastRender = time.Now()
+	now := time.Now()
+	dt := float32(now.Sub(rt.lastRender).Seconds())
+	rt.lastRender = now
+
+	for _, cam := range w.RunTime.Cameras {
+		cam.Update(dt)
+	}
+
 	w.RunTime.Renderer.FrameID.Inc()
 	w.RunTime.Renderer.Flush(w.RunTime.backend)
 }
@@ -103,6 +127,7 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 
 	targetDt := time.Duration(float64(time.Second) / float64(hz))
 
+	defaultCam := NewCamera2D()
 	win := &Window{
 		ID:     wm.nextID,
 		Handle: handle,
@@ -115,8 +140,12 @@ func (wm *windowManager) Create(cfg WindowConfig) (*Window, error) {
 			backend:    &notarender.GLBackend{},
 			Renderer:   &notarender.Renderer{},
 			TextureMgr: notatexture.NewTextureManager(),
+			ShaderMgr:  notashader.NewManager(),
+			Cameras:    []*Camera2D{defaultCam},
 		},
+		DefaultCamera: defaultCam,
 	}
+	win.RunTime.SpriteMgr = notatexture.NewSpriteManager(win.RunTime.TextureMgr)
 
 	win.MakeContextCurrent()
 	if err := gl.Init(); err != nil {

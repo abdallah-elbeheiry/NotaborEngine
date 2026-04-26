@@ -18,6 +18,7 @@ type DrawOrder struct {
 	Vertices []Vertex2D
 	Texture  *notatexture.Texture
 	Shader   *notashader.Shader
+	Material *notashader.Material
 }
 
 type PolygonRenderData struct {

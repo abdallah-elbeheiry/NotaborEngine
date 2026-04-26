@@ -67,26 +67,31 @@ func polygonVsPolygonMTV(a, b *PolygonCollider) (bool, notamath.Vec2) {
 }
 
 func circleVsCircleMTV(a, b *CircleCollider) (bool, notamath.Vec2) {
-	dir := b.WorldCenter().Sub(a.WorldCenter())
+	dir := a.WorldCenter().Sub(b.WorldCenter())
 	distSq := dir.LenSquared()
 	rSum := a.WorldRadius() + b.WorldRadius()
 	if distSq >= rSum*rSum {
 		return false, notamath.Vec2{}
 	}
 
-	dist := float32(1.0)
-	if distSq > 0 {
-		dist = float32(math.Sqrt(float64(distSq)))
+	if distSq == 0 {
+		return true, clampMTV(notamath.Vec2{X: rSum, Y: 0})
 	}
 
+	dist := float32(math.Sqrt(float64(distSq)))
 	overlap := rSum - dist
 	mtv := dir.Mul(1 / dist).Mul(overlap) // normalize dir and scale by overlap
-	return true, mtv
+	return true, clampMTV(mtv)
 }
 
 func circleVsPolygonMTV(c *CircleCollider, p *PolygonCollider) (bool, notamath.Vec2) {
 	axes := getAxes(p.WorldVertices)
 	center := c.WorldCenter()
+	closest := closestVertex(center, p.WorldVertices)
+	closestAxis := center.Sub(closest).Normalize()
+	if closestAxis.LenSquared() > 0 {
+		axes = append(axes, closestAxis)
+	}
 
 	minOverlap := float32(1e30)
 	var smallestAxis notamath.Vec2
@@ -107,12 +112,51 @@ func circleVsPolygonMTV(c *CircleCollider, p *PolygonCollider) (bool, notamath.V
 		}
 	}
 
-	dir := p.WorldVertices[0].Sub(center)
+	dir := center.Sub(polygonCentroidPoint(p.WorldVertices))
 	if dot(dir, smallestAxis) < 0 {
 		smallestAxis = smallestAxis.Neg()
 	}
 
-	return true, smallestAxis.Mul(minOverlap)
+	return true, clampMTV(smallestAxis.Mul(minOverlap))
+}
+
+func closestVertex(center notamath.Po2, vertices []notamath.Po2) notamath.Po2 {
+	if len(vertices) == 0 {
+		return notamath.Po2{}
+	}
+
+	closest := vertices[0]
+	bestDist := center.DistanceSquared(closest)
+	for _, v := range vertices[1:] {
+		dist := center.DistanceSquared(v)
+		if dist < bestDist {
+			bestDist = dist
+			closest = v
+		}
+	}
+	return closest
+}
+
+func polygonCentroidPoint(vertices []notamath.Po2) notamath.Po2 {
+	if len(vertices) == 0 {
+		return notamath.Po2{}
+	}
+
+	var x, y float32
+	for _, v := range vertices {
+		x += v.X
+		y += v.Y
+	}
+
+	inv := 1 / float32(len(vertices))
+	return notamath.Po2{X: x * inv, Y: y * inv}
+}
+
+func clampMTV(mtv notamath.Vec2) notamath.Vec2 {
+	if mtv.Len() > mTVTravelDistance {
+		return mtv.Normalize().Mul(mTVTravelDistance)
+	}
+	return mtv
 }
 
 // SetMaximumMTVTravelDistance sets the maximum travel distance for the MTV calculation per frame. the default is 1.0

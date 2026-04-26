@@ -423,14 +423,26 @@ func (im *InputManager) updateSignals() {
 	im.mu.RLock()
 	defer im.mu.RUnlock()
 
+	// Snapshot all signals exactly once per tick
+	seenSignals := make(map[*InputSignal]bool)
+	for _, signals := range im.inputToSignal {
+		for _, sig := range signals {
+			if sig != nil && !seenSignals[sig] {
+				sig.Snapshot()
+				sig.Set(false)
+				seenSignals[sig] = true
+			}
+		}
+	}
+
 	for input, signals := range im.inputToSignal {
 		active := im.active[input]
-		for _, sig := range signals {
-			if sig == nil {
-				continue
+		if active {
+			for _, sig := range signals {
+				if sig != nil {
+					sig.Set(true)
+				}
 			}
-			sig.Snapshot()
-			sig.Set(active)
 		}
 	}
 }
