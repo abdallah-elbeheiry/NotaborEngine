@@ -1,101 +1,106 @@
 package notatask
 
 import (
-	"NotaborEngine/notaentity"
 	"NotaborEngine/notatomic"
 	"errors"
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var ErrDone = errors.New("task finished")
 
-type job struct {
-	task *Task
-	wg   *sync.WaitGroup
-	err  *error
+type worker struct {
+	jobs chan workerJob
 }
 
-var jobPool = sync.Pool{
-	New: func() any { return &job{} },
+type workerJob struct {
+	tasks   []*Task
+	nowUnix int64
+	done    *sync.WaitGroup
 }
 
 type Loop struct {
-	Hz        notatomic.Float32
-	lastTick  notatomic.Pointer[time.Time]
-	delta     notatomic.Int64
-	tickCount notatomic.UInt64
+	Hz           notatomic.Float32
+	lastTickNano notatomic.Int64
+	delta        notatomic.Int64
+	tickCount    notatomic.UInt64
 
-	Tasks notatomic.Pointer[[]*Task] // double-buffered slice of tasks
+	tasks []*Task
 
-	stop       chan struct{}
-	workerDone chan struct{}
-	taskQueue  chan *job
+	pendingMu    sync.Mutex
+	pendingTasks []*Task
+	hasPending   atomic.Uint32
 
-	wg         sync.WaitGroup
-	workerWg   sync.WaitGroup
-	numWorkers int
+	stop     chan struct{}
+	workerWg sync.WaitGroup
 
-	// Reusable slice buffer to avoid allocating each tick
-	taskBuffer []*Task
+	numWorkers        int
+	parallelThreshold int
+	workers           []*worker
 }
 
-// Start initializes the loop and workers
-func (l *Loop) Start(manager *notaentity.EntityManager) {
+func CreateLoop(Hz float32) *Loop {
+	l := &Loop{}
+	l.Hz.Set(Hz)
+	l.tasks = make([]*Task, 0, 64)
+	l.pendingTasks = make([]*Task, 0, 16)
+	l.lastTickNano.Set(time.Now().UnixNano())
+	return l
+}
+
+func (l *Loop) Start() {
 	if l.stop != nil {
 		return
 	}
 	l.stop = make(chan struct{})
 
-	if l.Tasks.Get() == nil {
-		tasks := make([]*Task, 0, 32)
-		l.Tasks.Set(&tasks)
+	if l.lastTickNano.Get() == 0 {
+		l.lastTickNano.Set(time.Now().UnixNano())
 	}
 
-	if l.lastTick.Get() == nil {
-		now := time.Now()
-		l.lastTick.Set(&now)
+	totalWorkers := runtime.GOMAXPROCS(0)
+	if totalWorkers < 1 {
+		totalWorkers = 1
 	}
 
-	l.numWorkers = runtime.NumCPU() - 1
-	if l.numWorkers < 1 {
-		l.numWorkers = 1
-	}
+	l.numWorkers = totalWorkers - 1
+	l.parallelThreshold = maxInt(64, totalWorkers*8)
 
 	l.startWorkers()
-	l.wg.Add(1)
 	go l.runLoop()
 }
 
 func (l *Loop) startWorkers() {
-	l.taskQueue = make(chan *job, 256) // large buffer to reduce blocking
-	l.workerDone = make(chan struct{})
+	if l.numWorkers <= 0 {
+		l.workers = nil
+		return
+	}
 
+	l.workers = make([]*worker, l.numWorkers)
 	for i := 0; i < l.numWorkers; i++ {
+		l.workers[i] = &worker{jobs: make(chan workerJob, 1)}
 		l.workerWg.Add(1)
-		go l.worker()
+		go l.workerLoop(l.workers[i])
 	}
 }
 
-func (l *Loop) worker() {
+func (l *Loop) workerLoop(w *worker) {
 	defer l.workerWg.Done()
+
 	for {
 		select {
-		case j := <-l.taskQueue:
-			if j == nil || j.task == nil {
-				continue
-			}
-			*j.err = j.task.runFunc(time.Now())
-			j.wg.Done()
-		case <-l.workerDone:
+		case <-l.stop:
 			return
+		case job := <-w.jobs:
+			runTaskSlice(job.tasks, job.nowUnix)
+			job.done.Done()
 		}
 	}
 }
 
-// Stop halts the loop and all workers
 func (l *Loop) Stop() {
 	if l.stop == nil {
 		return
@@ -106,205 +111,203 @@ func (l *Loop) Stop() {
 	default:
 		close(l.stop)
 	}
-	l.wg.Wait()
-	close(l.workerDone)
 	l.workerWg.Wait()
 }
 
-// Add a task to the loop
 func (l *Loop) Add(t *Task) {
-	const minCap = 32
-	for {
-		oldPtr := l.Tasks.Get()
-		old := [](*Task){}
-		if oldPtr != nil {
-			old = *oldPtr
-		}
-
-		newLen := len(old) + 1
-		newCap := newLen * 2
-		if newLen < minCap {
-			newCap = minCap
-		}
-
-		newSlice := make([]*Task, newLen, newCap)
-		copy(newSlice, old)
-		newSlice[len(old)] = t
-
-		if l.Tasks.CompareAndSwap(oldPtr, &newSlice) {
-			return
-		}
-	}
+	l.pendingMu.Lock()
+	l.pendingTasks = append(l.pendingTasks, t)
+	l.pendingMu.Unlock()
+	l.hasPending.Store(1)
 }
 
-// Remove a task from the loop (pointer comparison, no reflection)
+func (l *Loop) Do(fn func()) *Task {
+	task := Do(fn)
+	l.Add(task)
+	return task
+}
+
+func (l *Loop) Once(fn func()) *Task {
+	task := Once(fn)
+	l.Add(task)
+	return task
+}
+
+func (l *Loop) Every(d time.Duration, fn func()) *Task {
+	task := Every(d, fn)
+	l.Add(task)
+	return task
+}
+
+func (l *Loop) Times(n uint32, fn func()) *Task {
+	task := Times(n, fn)
+	l.Add(task)
+	return task
+}
+
+func (l *Loop) After(d time.Duration, fn func()) *Task {
+	task := After(d, fn)
+	l.Add(task)
+	return task
+}
+
+func (l *Loop) AfterTicks(count uint32, fn func()) *Task {
+	task := AfterTicks(count, fn)
+	l.Add(task)
+	return task
+}
+
 func (l *Loop) Remove(t *Task) {
-	for {
-		oldPtr := l.Tasks.Get()
-		oldSlice := *oldPtr
-		found := -1
-		for i, existing := range oldSlice {
-			if existing == t { // direct pointer comparison
-				found = i
-				break
-			}
-		}
-		if found == -1 {
-			return
-		}
-
-		newSlice := append(oldSlice[:found:found], oldSlice[found+1:]...)
-		if l.Tasks.CompareAndSwap(oldPtr, &newSlice) {
-			return
-		}
-	}
+	t.cancel()
 }
 
-// runLoop executes tasks per tick
 func (l *Loop) runLoop() {
-	defer l.wg.Done()
 	hz := l.Hz.Get()
 	if hz <= 0 {
 		hz = 60
 	}
 	interval := time.Duration(float64(time.Second) / float64(hz))
-	l.delta.Set(int64(interval))
-	nextTick := time.Now().Add(interval)
+	intervalNano := int64(interval)
+	l.delta.Set(intervalNano)
+
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+
+	nextTickNano := time.Now().UnixNano() + intervalNano
+	const maxCatchUpTicks = 256
 
 	for {
 		select {
 		case <-l.stop:
 			return
-		default:
+		case <-timer.C:
 		}
 
-		l.waitUntil(nextTick)
-		now := time.Now()
-		l.lastTick.Set(&now)
+		nowUnix := time.Now().UnixNano()
+		if nowUnix < nextTickNano {
+			timer.Reset(time.Duration(nextTickNano - nowUnix))
+			continue
+		}
 
-		ptrTasks := l.Tasks.Get()
-		if ptrTasks != nil {
-			tasks := *ptrTasks
-			if len(l.taskBuffer) < len(tasks) {
-				l.taskBuffer = make([]*Task, len(tasks))
-			} else {
-				l.taskBuffer = l.taskBuffer[:len(tasks)]
+		catchUpTicks := 0
+		for nowUnix >= nextTickNano {
+			l.runTick(nowUnix)
+			nextTickNano += intervalNano
+			catchUpTicks++
+			if catchUpTicks >= maxCatchUpTicks {
+				break
 			}
-			copy(l.taskBuffer, tasks)
 
-			// Clear the shared pointer quickly
-			empty := (*[]*Task)(nil)
-			l.Tasks.Set(empty)
-
-			if len(l.taskBuffer) > 0 {
-				remaining := l.runTasksParallel(l.taskBuffer)
-				l.mergeBack(remaining)
+			newHz := l.Hz.Get()
+			if newHz > 0 && newHz != hz {
+				hz = newHz
+				interval = time.Duration(float64(time.Second) / float64(hz))
+				intervalNano = int64(interval)
+				l.delta.Set(intervalNano)
 			}
+
+			nowUnix = time.Now().UnixNano()
 		}
 
-		l.tickCount.Add(1)
-		newHz := l.Hz.Get()
-		if newHz > 0 && newHz != hz {
-			hz = newHz
-			interval = time.Duration(float64(time.Second) / float64(hz))
-			l.delta.Set(int64(interval))
+		if catchUpTicks >= maxCatchUpTicks && nowUnix >= nextTickNano {
+			nextTickNano = nowUnix + intervalNano
 		}
-		nextTick = nextTick.Add(interval)
+
+		sleepFor := nextTickNano - time.Now().UnixNano()
+		if sleepFor < 0 {
+			sleepFor = 0
+		}
+		timer.Reset(time.Duration(sleepFor))
 	}
 }
 
-// mergeBack efficiently reuses slices
-func (l *Loop) mergeBack(tasks []*Task) {
+func (l *Loop) runTick(nowUnix int64) {
+	l.lastTickNano.Set(nowUnix)
+
+	l.drainPending()
+
+	if len(l.tasks) > 0 {
+		l.runTasks(l.tasks, nowUnix)
+		l.compactTasks()
+	}
+
+	l.tickCount.Add(1)
+}
+
+func (l *Loop) runTasks(tasks []*Task, nowUnix int64) {
 	if len(tasks) == 0 {
 		return
 	}
-	for {
-		oldPtr := l.Tasks.Get()
-		var old []*Task
-		if oldPtr != nil {
-			old = *oldPtr
+
+	if l.numWorkers == 0 || len(tasks) < l.parallelThreshold {
+		runTaskSlice(tasks, nowUnix)
+		return
+	}
+
+	activeLanes := minInt(len(tasks), l.numWorkers+1)
+	if activeLanes <= 1 {
+		runTaskSlice(tasks, nowUnix)
+		return
+	}
+
+	baseChunk := len(tasks) / activeLanes
+	extra := len(tasks) % activeLanes
+	workerJobs := activeLanes - 1
+
+	var done sync.WaitGroup
+	if workerJobs > 0 {
+		done.Add(workerJobs)
+	}
+
+	start := 0
+	for lane := 0; lane < activeLanes; lane++ {
+		chunkLen := baseChunk
+		if lane < extra {
+			chunkLen++
 		}
-		newSlice := make([]*Task, len(old)+len(tasks))
-		copy(newSlice, old)
-		copy(newSlice[len(old):], tasks)
-		if l.Tasks.CompareAndSwap(oldPtr, &newSlice) {
-			return
+		end := start + chunkLen
+		chunk := tasks[start:end]
+
+		if lane < workerJobs {
+			l.workers[lane].jobs <- workerJob{
+				tasks:   chunk,
+				nowUnix: nowUnix,
+				done:    &done,
+			}
+		} else {
+			runTaskSlice(chunk, nowUnix)
 		}
+		start = end
+	}
+
+	if workerJobs > 0 {
+		done.Wait()
 	}
 }
 
-// runTasksParallel executes tasks via workers and returns remaining
-func (l *Loop) runTasksParallel(tasks []*Task) []*Task {
-	count := len(tasks)
-	if count == 0 {
-		return tasks[:0]
-	}
-
-	results := make([]error, count)
-	var tickWg sync.WaitGroup
-	tickWg.Add(count)
-
-	for i, t := range tasks {
-		j := jobPool.Get().(*job)
-		j.task = t
-		j.err = &results[i]
-		j.wg = &tickWg
-		l.taskQueue <- j
-	}
-
-	tickWg.Wait()
-
-	for i, _ := range tasks {
-		if results[i] != nil && !errors.Is(results[i], ErrDone) {
-			fmt.Println("Task error:", results[i])
+func (l *Loop) compactTasks() {
+	kept := 0
+	for _, t := range l.tasks {
+		if !t.done && t.canceled.Load() == 0 && t.err == nil {
+			l.tasks[kept] = t
+			kept++
+		} else if !errors.Is(t.err, ErrDone) {
+			fmt.Println("Task error:", t.err)
 		}
+		t.done = false
+		t.err = nil
 	}
-
-	// Keep only active tasks
-	newIdx := 0
-	for i := 0; i < count; i++ {
-		if results[i] == nil {
-			tasks[newIdx] = tasks[i]
-			newIdx++
-		}
-	}
-	tasks = tasks[:newIdx]
-
-	// Reset jobs
-	for i := 0; i < count; i++ {
-		jobPool.Put(&job{})
-	}
-
-	return tasks
+	l.tasks = l.tasks[:kept]
 }
 
-// waitUntil sleeps until next tick
-func (l *Loop) waitUntil(nextTick time.Time) {
-	if remaining := time.Until(nextTick); remaining > 0 {
-		time.Sleep(remaining)
-	}
-}
-
-// CreateLoop returns a new Loop instance
-func CreateLoop(Hz float32) *Loop {
-	l := &Loop{}
-	l.Hz.Set(Hz)
-	l.Tasks.Set(&[]*Task{})
-	now := time.Now()
-	l.lastTick.Set(&now)
-	return l
-}
-
-// Alpha returns progress through current tick
 func (l *Loop) Alpha(now time.Time) float32 {
-	last := l.lastTick.Get()
-	delta := time.Duration(l.delta.Get())
-
-	if last == nil || delta <= 0 {
+	lastNano := l.lastTickNano.Get()
+	deltaNano := l.delta.Get()
+	if lastNano == 0 || deltaNano <= 0 {
 		return 1
 	}
 
-	alpha := float32(now.Sub(*last).Seconds() / delta.Seconds())
+	alpha := float32(float64(now.UnixNano()-lastNano) / float64(deltaNano))
 	if alpha < 0 {
 		return 0
 	}
@@ -312,4 +315,42 @@ func (l *Loop) Alpha(now time.Time) float32 {
 		return 1
 	}
 	return alpha
+}
+
+func (l *Loop) TickCount() uint64 {
+	return l.tickCount.Get()
+}
+
+func runTaskSlice(tasks []*Task, nowUnix int64) {
+	for _, t := range tasks {
+		t.run(nowUnix)
+	}
+}
+
+func (l *Loop) drainPending() {
+	if l.hasPending.Load() == 0 {
+		return
+	}
+
+	l.pendingMu.Lock()
+	if len(l.pendingTasks) > 0 {
+		l.tasks = append(l.tasks, l.pendingTasks...)
+		l.pendingTasks = l.pendingTasks[:0]
+	}
+	l.hasPending.Store(0)
+	l.pendingMu.Unlock()
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

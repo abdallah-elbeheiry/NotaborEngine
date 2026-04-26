@@ -184,3 +184,11 @@ func (s *Shader) Bind() {
 func (s *Shader) Unbind() {
 	gl.UseProgram(0)
 }
+
+func (s *Shader) Delete() {
+	if s.Program != 0 {
+		gl.DeleteProgram(s.Program)
+		s.Program = 0
+	}
+	s.Uniforms = make(map[string]int32)
+}

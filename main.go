@@ -6,12 +6,11 @@ import (
 	"NotaborEngine/notacore"
 	"NotaborEngine/notageometry"
 	"NotaborEngine/notamath"
-	"NotaborEngine/notashader"
 	"NotaborEngine/notatask"
-	"NotaborEngine/notatexture"
 	"NotaborEngine/notatomic"
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 )
 
@@ -24,8 +23,10 @@ func main() {
 	}
 	defer engine.Shutdown()
 
-	logicLoop := notatask.CreateLoop(50000)
+	logicLoop := notatask.CreateLoop(10000)
 	drawingLoop := notatask.CreateLoop(60)
+
+	fmt.Println(runtime.NumCPU())
 
 	engine.SetInputFrequency(2000)
 	engine.SoundManager.SetSoundsFolder("resources/sounds")
@@ -53,17 +54,12 @@ func main() {
 	// END OF WINDOW CREATION
 
 	// START OF ENTITY CREATION
-	texture, err := win.LoadTexture("test", "resources/images/hahaha.jpg")
+	rect := notageometry.CreateRectangle(0.5, 0.5)
+	sprite, err := win.LoadSprite("quadSprite", "resources/images/hahaha.jpg", rect)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rect := notageometry.CreateRectangle(0.5, 0.5)
-	sprite := &notatexture.Sprite{
-		Texture: texture,
-		Name:    "quadSprite",
-		Polygon: rect,
-	}
-	shader, err := notashader.NewShader("notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
+	shader, err := win.LoadShader("basic", "notashader/shaders/basic.vert", "notashader/shaders/basic.frag")
 
 	if err != nil {
 		fmt.Println(err)
@@ -76,7 +72,14 @@ func main() {
 
 	// Static walls
 	rect1 := notageometry.CreateRectangle(0.5, 2)
-	sprite1 := &notatexture.Sprite{Texture: texture, Name: "quadSprite", Polygon: rect1}
+	texture, err := win.GetTexture("quadSprite")
+	if err != nil {
+		log.Fatal(err)
+	}
+	sprite1, err := win.CreateSprite("wallSprite", texture, rect1)
+	if err != nil {
+		log.Fatal(err)
+	}
 	entity1 := em.CreateEntity("wall").
 		WithPolygon(rect1).
 		WithCollider(notacollision.NewPolygonCollider(rect1.Points)).
@@ -99,15 +102,14 @@ func main() {
 	em.Flush()
 
 	// Add draw calls
-	drawingLoop.Add(notatask.CreateTask(func() error {
+	drawingLoop.Do(func() {
 		err := entity.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
 		err = entity1.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
 		err = entity2.Draw(win.RunTime.Renderer, logicLoop.Alpha(time.Now()))
 		if err != nil {
-			return err
+			panic(err)
 		}
-		return nil
-	}))
+	})
 	// END OF ENTITY CREATION
 
 	// START OF INPUT MAPPING
@@ -144,13 +146,13 @@ func main() {
 	// Movement speed
 	speed := float32(0.001)
 
-	actW.AddTask(notatask.CreateTask(func() error { deltaMove.Y += speed; return nil }, notatask.RunOnce()))
-	actS.AddTask(notatask.CreateTask(func() error { deltaMove.Y -= speed; return nil }, notatask.RunOnce()))
-	actA.AddTask(notatask.CreateTask(func() error { deltaMove.X -= speed; return nil }, notatask.RunOnce()))
-	actD.AddTask(notatask.CreateTask(func() error { deltaMove.X += speed; return nil }, notatask.RunOnce()))
-	actMouseLeft.AddTask(notatask.CreateTask(func() error { fmt.Println("Mouse left clicked"); return nil }, notatask.RunOnce()))
+	actW.AddTask(notatask.Once(func() { deltaMove.Y += speed }))
+	actS.AddTask(notatask.Once(func() { deltaMove.Y -= speed }))
+	actA.AddTask(notatask.Once(func() { deltaMove.X -= speed }))
+	actD.AddTask(notatask.Once(func() { deltaMove.X += speed }))
+	actMouseLeft.AddTask(notatask.Once(func() { fmt.Println("Mouse left clicked") }))
 
-	logicLoop.Add(notatask.CreateTask(func() error {
+	logicLoop.Do(func() {
 		entity.Move(deltaMove)
 		collision, mtv := em.CollidesMTV(entity, entity1)
 		if collision {
@@ -164,11 +166,10 @@ func main() {
 			entity.Move(mtv)
 		}
 		deltaMove = notamath.Vec2{} // reset
-		return nil
-	}))
+	})
 	val := notatomic.Float32{}
 	val.Set(1)
-	logicLoop.Add(notatask.CreateTask(func() error {
+	logicLoop.Do(func() {
 		entity.Move(notamath.Vec2{X: 0.001 * val.Get(), Y: 0})
 		entity.Rotate(0.001)
 		em.Flush()
@@ -187,35 +188,24 @@ func main() {
 			val.Set(val.Get() * -1)
 			entity.Move(mtv)
 		}
-		return nil
-	}))
-
-	i := notatomic.Int64{}
-
-	incrementCounter := func() error {
-		i.Inc()
-		return nil
-	}
+	})
 
 	lastTs := time.Now()
-
-	incrementTask := notatask.CreateTask(incrementCounter)
-	printLoopTask := notatask.CreateTask(func() error {
+	lastTickCount := logicLoop.TickCount()
+	printLoopTask := notatask.Every(time.Second*2, func() {
 		now := time.Now()
 		delta := now.Sub(lastTs).Seconds()
-		count := i.Get()
+		currentTickCount := logicLoop.TickCount()
+		count := currentTickCount - lastTickCount
 		freq := float64(count) / delta
 		fmt.Printf("Logic loop frequency: %.2f Hz\n", freq)
-		i.Set(0)
+		lastTickCount = currentTickCount
 		lastTs = now
-		return nil
-	}, notatask.RepeatEvery(time.Second*2))
+	})
 
-	logicLoop.Add(notatask.CreateTask(func() error {
+	logicLoop.Do(func() {
 		em.Flush()
-		return nil
-	}))
-	logicLoop.Add(incrementTask)
+	})
 	logicLoop.Add(printLoopTask)
 	// END OF GAME LOGIC
 

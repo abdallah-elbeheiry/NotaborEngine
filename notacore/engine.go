@@ -4,7 +4,6 @@ import (
 	"NotaborEngine/notaentity"
 	"NotaborEngine/notasound"
 	"NotaborEngine/notatask"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,13 +35,13 @@ func (e *Engine) Run() error {
 	e.running = true
 
 	if e.inputLoop != nil {
-		e.inputLoop.Start(e.EntityManager)
+		e.inputLoop.Start()
 	}
 	// Start all logic loops
 	for _, w := range e.Windows {
 		cfg := w.GetConfig()
 		for _, loop := range cfg.Loops {
-			loop.Start(e.EntityManager)
+			loop.Start()
 		}
 		w.GetRuntime().lastRender = time.Now()
 	}
@@ -88,13 +87,12 @@ func (e *Engine) Run() error {
 func (e *Engine) SetInputFrequency(Hz float32) {
 	e.inputLoop = notatask.CreateLoop(Hz)
 	e.InputManager.loop = e.inputLoop
-	e.inputLoop.Add(notatask.CreateTask(func() error {
+	e.inputLoop.Do(func() {
 		if e.InputManager == nil {
-			return errors.New("InputManager is not initialized, initialize it first")
+			panic("InputManager is not initialized, initialize it first")
 		}
 		e.InputManager.tick()
-		return nil
-	}))
+	})
 }
 
 // AllWindowsClosed returns true if all windows are closed
