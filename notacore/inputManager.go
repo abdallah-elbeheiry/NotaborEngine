@@ -447,44 +447,44 @@ func (im *InputManager) updateSignals() {
 	}
 }
 
-func isInputActive(win *Window, input Input, gamepads []*glfw.GamepadState) bool {
-	if key, ok := glfwKeyMap[input]; ok {
-		return win.GLFW().GetKey(key) == glfw.Press
-	}
-
-	if btn, ok := glfwMouseButtonMap[input]; ok {
-		return win.GLFW().GetMouseButton(btn) == glfw.Press
-	}
-
-	if len(gamepads) == 0 {
-		return false
-	}
-
-	if btn, ok := glfwGamepadButtonMap[input]; ok {
-		for _, st := range gamepads {
-			if st != nil && st.Buttons[btn] == glfw.Press {
-				return true
-			}
-		}
-		return false
-	}
-
-	if axis, ok := glfwGamepadAxisMap[input]; ok {
-		const deadzone = float32(0.2)
-		for _, st := range gamepads {
-			if st == nil {
-				continue
-			}
-			v := st.Axes[axis]
-			if v > deadzone || v < -deadzone {
-				return true
-			}
-		}
-		return false
-	}
-
-	return false
-}
+//func isInputActive(win *Window, input Input, gamepads []*glfw.GamepadState) bool {
+//	if key, ok := glfwKeyMap[input]; ok {
+//		return win.GLFW().GetKey(key) == glfw.Press
+//	}
+//
+//	if btn, ok := glfwMouseButtonMap[input]; ok {
+//		return win.GLFW().GetMouseButton(btn) == glfw.Press
+//	}
+//
+//	if len(gamepads) == 0 {
+//		return false
+//	}
+//
+//	if btn, ok := glfwGamepadButtonMap[input]; ok {
+//		for _, st := range gamepads {
+//			if st != nil && st.Buttons[btn] == glfw.Press {
+//				return true
+//			}
+//		}
+//		return false
+//	}
+//
+//	if axis, ok := glfwGamepadAxisMap[input]; ok {
+//		const deadzone = float32(0.2)
+//		for _, st := range gamepads {
+//			if st == nil {
+//				continue
+//			}
+//			v := st.Axes[axis]
+//			if v > deadzone || v < -deadzone {
+//				return true
+//			}
+//		}
+//		return false
+//	}
+//
+//	return false
+//}
 
 func connectedGamepads() []*glfw.GamepadState {
 	gamepads := make([]*glfw.GamepadState, 0, 4)
@@ -500,26 +500,27 @@ func connectedGamepads() []*glfw.GamepadState {
 	}
 	return gamepads
 }
-func (im *InputManager) captureInputs(windows []*Window) {
-	im.mu.Lock()
-	defer im.mu.Unlock()
 
-	gamepads := connectedGamepads()
-
-	for input := range im.inputToSignal {
-		im.active[input] = false // Reset
-
-		for _, win := range windows {
-			if win == nil || win.ShouldClose() {
-				continue
-			}
-			if isInputActive(win, input, gamepads) {
-				im.active[input] = true
-				break
-			}
-		}
-	}
-}
+//func (im *InputManager) captureInputs(windows []*Window) {
+//	im.mu.Lock()
+//	defer im.mu.Unlock()
+//
+//	gamepads := connectedGamepads()
+//
+//	for input := range im.inputToSignal {
+//		im.active[input] = false // Reset
+//
+//		for _, win := range windows {
+//			if win == nil || win.ShouldClose() {
+//				continue
+//			}
+//			if isInputActive(win, input, gamepads) {
+//				im.active[input] = true
+//				break
+//			}
+//		}
+//	}
+//}
 
 // BindInput binds a hardware input to a signal, when a hardware button activates the signal updates its values accordingly
 // a single hardware input can be bound to multiple different signals

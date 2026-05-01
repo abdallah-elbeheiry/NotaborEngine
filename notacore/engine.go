@@ -2,14 +2,11 @@ package notacore
 
 import (
 	"NotaborEngine/notaentity"
+	"NotaborEngine/notasdl"
 	"NotaborEngine/notasound"
 	"NotaborEngine/notatask"
-	"os"
-	"path/filepath"
 	"runtime"
 	"time"
-
-	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 type Settings struct {
@@ -19,8 +16,8 @@ type Settings struct {
 }
 
 type Engine struct {
-	Windows       []*Window
-	WindowManager *windowManager
+	Windows       []*notasdl.Window
+	Platform      notasdl.Platform
 	InputManager  *InputManager
 	SoundManager  *notasound.SoundManager
 	EntityManager *notaentity.EntityManager
@@ -37,38 +34,39 @@ func (e *Engine) Run() error {
 	if e.inputLoop != nil {
 		e.inputLoop.Start()
 	}
+
 	// Start all logic loops
 	for _, w := range e.Windows {
 		cfg := w.GetConfig()
 		for _, loop := range cfg.Loops {
 			loop.Start()
 		}
-		w.GetRuntime().lastRender = time.Now()
+		w.Runtime.LastFrame = time.Now()
 	}
 
 	for e.running && !e.AllWindowsClosed() {
-		e.WindowManager.PollEvents()
+		e.Platform.PollEvents()
 
-		if e.InputManager != nil {
-			e.InputManager.captureInputs(e.Windows)
-		}
+		//if e.InputManager != nil {
+		//	e.InputManager.captureInputs(e.Windows)
+		//}
 
 		now := time.Now()
 
 		for _, win := range e.Windows {
-			if win.ShouldClose() {
+			if win.ShouldClose {
 				continue
 			}
 
-			rt := win.GetRuntime()
-			elapsed := now.Sub(rt.lastRender)
-			if elapsed < rt.targetDt {
-				time.Sleep(rt.targetDt - elapsed)
+			rt := win.Runtime
+			elapsed := now.Sub(rt.LastFrame)
+			if elapsed < rt.TargetDt {
+				time.Sleep(rt.TargetDt - elapsed)
 				continue
 			}
-			win.MakeContextCurrent()
-			win.RunRenderer()
-			win.SwapBuffers()
+
+			win.MakeCurrent()
+			win.RenderFrame()
 		}
 	}
 
@@ -85,6 +83,7 @@ func (e *Engine) Run() error {
 func (e *Engine) SetInputFrequency(Hz float32) {
 	e.inputLoop = notatask.CreateLoop(Hz)
 	e.InputManager.loop = e.inputLoop
+
 	e.inputLoop.Do(func() {
 		if e.InputManager == nil {
 			panic("InputManager is not initialized, initialize it first")
@@ -96,7 +95,7 @@ func (e *Engine) SetInputFrequency(Hz float32) {
 // AllWindowsClosed returns true if all windows are closed
 func (e *Engine) AllWindowsClosed() bool {
 	for _, w := range e.Windows {
-		if !w.ShouldClose() {
+		if !w.ShouldClose {
 			return false
 		}
 	}
@@ -105,76 +104,45 @@ func (e *Engine) AllWindowsClosed() bool {
 
 // Shutdown shuts down the engine and releases all resources
 func (e *Engine) Shutdown() {
-	glfw.Terminate()
+	if e.Platform != nil {
+		e.Platform.Shutdown()
+	}
 }
 
 func (e *Engine) initPlatform() error {
 	runtime.LockOSThread()
 
-	if err := addNativeDLLPath(); err != nil {
+	p := &notasdl.WindowManager{}
+	if err := p.Init(); err != nil {
 		return err
 	}
 
-	if err := glfw.Init(); err != nil {
-		return err
-	}
+	e.Platform = p
 
-	glfw.WindowHint(glfw.Resizable, glfw.True)
-	glfw.WindowHint(glfw.ContextVersionMajor, 4)
-	glfw.WindowHint(glfw.ContextVersionMinor, 6)
-	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
-	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
-
-	wm := &windowManager{
-		windows2D: []*Window{},
-		nextID:    0,
-	}
-
-	e.WindowManager = wm
 	e.InputManager = &InputManager{}
 	e.EntityManager = notaentity.NewEntityManager()
+
 	return nil
 }
 
 // CreateWindow creates a new window with the given configuration
-func (e *Engine) CreateWindow(cfg WindowConfig) (*Window, error) {
-	win, err := e.WindowManager.Create(cfg)
+func (e *Engine) CreateWindow(cfg *notasdl.WindowConfig) (*notasdl.Window, error) {
+	win, err := e.Platform.CreateWindow(cfg)
 	if err != nil {
 		return nil, err
 	}
-	win.MakeContextCurrent()
-	win.RunTime.backend.Init()
+
+	win.MakeCurrent()
+	win.Runtime.Backend.Init()
+
 	if e.settings.Vsync {
-		glfw.SwapInterval(1)
+		win.SetVSync(true)
 	} else {
-		glfw.SwapInterval(0)
+		win.SetVSync(false)
 	}
+
 	e.Windows = append(e.Windows, win)
 	return win, nil
-}
-
-func addNativeDLLPath() error {
-	switch runtime.GOOS {
-	case "windows":
-		exeDir, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		dllDir := filepath.Join(exeDir, "notacore", "native", "windows")
-		err = os.Setenv("PATH", dllDir+";"+os.Getenv("PATH"))
-		if err != nil {
-			return err
-		}
-
-	case "linux":
-		// set linux paths later
-
-	case "darwin":
-	// set mac paths later
-	default:
-		// return unsupported platform error
-	}
-	return nil
 }
 
 // CreateEngine creates a new engine instance with the given settings
@@ -187,11 +155,12 @@ func CreateEngine(settings *Settings) (*Engine, error) {
 	}
 
 	e := &Engine{
-		Windows:       []*Window{},
-		settings:      settings,
-		WindowManager: &windowManager{},
-		SoundManager:  audio,
+		Windows:      []*notasdl.Window{},
+		settings:     settings,
+		Platform:     nil,
+		SoundManager: audio,
 	}
+
 	e.ChangeSettings(settings)
 	return e, e.initPlatform()
 }
@@ -201,14 +170,6 @@ func (e *Engine) ChangeSettings(settings *Settings) {
 	e.settings = settings
 	e.SoundManager.Mute = settings.Muted
 	e.SoundManager.MasterVolume = settings.SoundLevel
-
-	if len(e.Windows) > 0 {
-		if settings.Vsync {
-			glfw.SwapInterval(1)
-		} else {
-			glfw.SwapInterval(0)
-		}
-	}
 }
 
 // GetSettings returns the engine's settings as a copy

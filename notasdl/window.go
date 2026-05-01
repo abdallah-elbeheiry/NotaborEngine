@@ -1,9 +1,10 @@
 package notasdl
 
 import (
-	"NotaborEngine/notacore"
+	"NotaborEngine/notaentity"
 	"NotaborEngine/notarender"
 	"NotaborEngine/notashader"
+	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
 	"time"
 
@@ -26,13 +27,16 @@ type WindowConfig struct {
 	Type      WindowType
 
 	TargetFPS float32
+	Loops     []*notatask.Loop
 }
 
 type WindowRuntime struct {
-	lastFrame time.Time
-	targetDt  time.Duration
+	LastFrame time.Time
+	TargetDt  time.Duration
 
 	GLContext sdl.GLContext
+
+	RenderLoop *notatask.Loop
 
 	Backend    *notarender.GLBackend
 	Renderer   *notarender.Renderer
@@ -40,7 +44,7 @@ type WindowRuntime struct {
 	SpriteMgr  *notatexture.SpriteManager
 	ShaderMgr  *notashader.Manager
 
-	Cameras []*notacore.Camera2D
+	Cameras []*Camera2D
 }
 
 type Window struct {
@@ -48,15 +52,15 @@ type Window struct {
 	Handle        *sdl.Window
 	Config        *WindowConfig
 	Runtime       *WindowRuntime
-	DefaultCamera *notacore.Camera2D
+	DefaultCamera *Camera2D
 
 	ShouldClose bool
 }
 
 func (w *Window) RenderFrame() {
 	now := time.Now()
-	dt := float32(now.Sub(w.Runtime.lastFrame).Seconds())
-	w.Runtime.lastFrame = now
+	dt := float32(now.Sub(w.Runtime.LastFrame).Seconds())
+	w.Runtime.LastFrame = now
 
 	for _, cam := range w.Runtime.Cameras {
 		cam.Update(dt)
@@ -70,4 +74,37 @@ func (w *Window) RenderFrame() {
 
 func (w *Window) MakeCurrent() {
 	_ = sdl.GL_MakeCurrent(w.Handle, w.Runtime.GLContext)
+}
+
+func (w *Window) GetConfig() *WindowConfig {
+	return w.Config
+}
+
+func (w *Window) SetVSync(enabled bool) {
+	if enabled {
+		_ = sdl.GL_SetSwapInterval(1)
+	} else {
+		_ = sdl.GL_SetSwapInterval(0)
+	}
+}
+
+// Draw queues entities for rendering using SDL-backed renderer.
+// If cam is nil, default camera is used.
+func (w *Window) Draw(alpha float32, cam *Camera2D, entities ...*notaentity.Entity) error {
+	if cam == nil {
+		cam = w.DefaultCamera
+	}
+
+	view := cam.ViewMatrix()
+
+	for _, e := range entities {
+		if e == nil {
+			continue
+		}
+		if err := e.DrawWithView(w.Runtime.Renderer, view, alpha); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -1,88 +1,79 @@
 package main
 
 import (
+	"NotaborEngine/notacolor"
+	"NotaborEngine/notacore"
+	"NotaborEngine/notaentity"
 	"NotaborEngine/notasdl"
-
-	"github.com/Zyko0/go-sdl3/bin/binsdl"
-	"github.com/Zyko0/go-sdl3/sdl"
-	"github.com/go-gl/gl/v4.6-core/gl"
+	"NotaborEngine/notatask"
+	"log"
+	"time"
 )
 
 func main() {
-	defer binsdl.Load().Unload()
-	defer sdl.Quit()
-	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
-		panic(err)
+	// Engine setup
+	settings := &notacore.Settings{
+		Vsync:      true,
+		SoundLevel: 1,
+		Muted:      false,
 	}
 
-	_ = sdl.GL_SetAttribute(sdl.GL_CONTEXT_MAJOR_VERSION, 4)
-	_ = sdl.GL_SetAttribute(sdl.GL_CONTEXT_MINOR_VERSION, 6)
-	_ = sdl.GL_SetAttribute(sdl.GL_CONTEXT_PROFILE_MASK, sdl.GL_CONTEXT_PROFILE_CORE)
-	_ = sdl.GL_SetAttribute(sdl.GL_DOUBLEBUFFER, 1)
-	defer sdl.Quit()
+	drawingLoop := notatask.CreateLoop(60)
 
-	cfg := notasdl.WindowConfig{
+	engine, err := notacore.CreateEngine(settings)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer engine.Shutdown()
+
+	cfg := &notasdl.WindowConfig{
 		X:         50,
 		Y:         50,
 		W:         800,
 		H:         600,
 		Title:     "Entity Test",
-		Type:      notasdl.Borderless,
+		Type:      notasdl.Windowed,
 		Resizable: true,
 		TargetFPS: 60,
+		Loops:     []*notatask.Loop{drawingLoop},
 	}
 
-	var wm notasdl.WindowManager
-
-	win, err := wm.Create(&cfg)
+	win, err := engine.CreateWindow(cfg)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-	win1, err := wm.Create(&cfg)
+
+	em := engine.EntityManager
+	circleRadius := float32(0.25)
+
+	ballVisual, err := win.LoadVisual("quadSprite", "resources/images/hahaha.jpg", notasdl.VisualOptions{
+		Width:        circleRadius * 2,
+		Height:       circleRadius * 2,
+		Mask:         notasdl.MaskCircle,
+		CircleRadius: 0.5,
+		CircleEdge:   0.01,
+	})
+
 	if err != nil {
-		panic(err)
-	}
-	win2, err := wm.Create(&cfg)
-	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	for !win.ShouldClose && !win1.ShouldClose && !win2.ShouldClose {
+	entity := em.CreateEntity("quad").
+		WithVisual(ballVisual).
+		WithCollision(notaentity.CircleCollision(circleRadius)).
+		WithColor(notacolor.White)
 
-		var ev sdl.Event
-
-		for sdl.PollEvent(&ev) {
-			switch ev.Type {
-			case sdl.EVENT_WINDOW_CLOSE_REQUESTED:
-				win.ShouldClose = true
-
-			case sdl.EVENT_QUIT:
-				win.ShouldClose = true
-			}
+	drawingLoop.Do(func() {
+		alpha := drawingLoop.Alpha(time.Now())
+		err := win.Draw(alpha, nil, entity)
+		if err != nil {
+			panic(err)
 		}
+	})
 
-		win.MakeCurrent()
-
-		gl.ClearColor(0, 1, 0, 1.0)
-		gl.Clear(gl.COLOR_BUFFER_BIT)
-
-		win.RenderFrame()
-
-		win1.MakeCurrent()
-
-		gl.ClearColor(1, 0, 0, 1)
-		gl.Clear(gl.COLOR_BUFFER_BIT)
-
-		win1.RenderFrame()
-
-		win2.MakeCurrent()
-
-		gl.ClearColor(0, 0, 1, 1)
-		gl.Clear(gl.COLOR_BUFFER_BIT)
-
-		win2.RenderFrame()
+	if err := engine.Run(); err != nil {
+		log.Fatal(err)
 	}
 
 	_ = win
-
 }

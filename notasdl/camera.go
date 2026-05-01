@@ -1,4 +1,4 @@
-package notacore
+package notasdl
 
 import (
 	"NotaborEngine/notamath"
