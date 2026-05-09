@@ -33,7 +33,7 @@ func main() {
 		Y:         50,
 		W:         800,
 		H:         600,
-		Title:     "Entity Test - Debug Input",
+		Title:     "Entity Test",
 		Type:      notasdl.Windowed,
 		Resizable: true,
 		TargetFPS: 60,
@@ -77,11 +77,8 @@ func main() {
 
 	leftClickSignal := notacore.Input("leftClick", notacore.MouseLeft, inputCtx)
 
-	frameCount := 0
-
 	drawingLoop.Do(func() {
 		engine.Input.BeginFrame()
-		frameCount++
 
 		var moveX, moveY float32
 

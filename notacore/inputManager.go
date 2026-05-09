@@ -110,7 +110,6 @@ const (
 	KeyF22
 	KeyF23
 	KeyF24
-	KeyF25
 
 	KeyKP0
 	KeyKP1
@@ -138,21 +137,14 @@ const (
 	KeyRightControl
 	KeyRightAlt
 	KeyRightSuper
-	KeyLeftCommand  //does not work yet
-	KeyRightCommand // does not work yet
-	KeyOptionLeft   //does not work yet
-	KeyOptionRight  //does not work yet
-	KeyFn           //does not work yet
 	KeyMenu
 
-	KeyMediaPlayPause //does not work yet
-	KeyMediaStop      //does not work yet
-	KeyMediaNext      //does not work yet
-	KeyMediaPrev      //does not work yet
-	KeyVolumeUp       //does not work yet
-	KeyVolumeDown     //does not work yet
-	KeyBrightnessUp   //does not work yet
-	KeyBrightnessDown //does not work yet
+	KeyMediaPlayPause
+	KeyMediaStop
+	KeyMediaNext
+	KeyMediaPrev
+	KeyVolumeUp
+	KeyVolumeDown
 
 	MouseLeft
 	MouseRight
@@ -185,179 +177,132 @@ const (
 	PadAxisRightY
 	PadAxisLeftTrigger
 	PadAxisRightTrigger
-
-	//TODO: what is below is not working yet, OS based API needed
-
-	Touch1
-	Touch2
-	Touch3
-	Touch4
-	Touch5
-	ForceTouch
-
-	SwipeUp1
-	SwipeDown1
-	SwipeLeft1
-	SwipeRight1
-	SwipeUp2
-	SwipeDown2
-	SwipeLeft2
-	SwipeRight2
-	SwipeUp3
-	SwipeDown3
-	SwipeLeft3
-	SwipeRight3
-	SwipeUp4
-	SwipeDown4
-	SwipeLeft4
-	SwipeRight4
-	SwipeUp5
-	SwipeDown5
-	SwipeLeft5
-	SwipeRight5
-
-	PinchIn
-	PinchOut
-	RotateCW
-	RotateCCW
-
-	MobileTouchBegin
-	MobileTouchMove
-	MobileTouchEnd
-	MobileTouchCancel
-	MobileBack
-	MobileHome
-	MobileVolumeUp
-	MobileVolumeDown
-	AccelerometerX
-	AccelerometerY
-	AccelerometerZ
-	GyroX
-	GyroY
-	GyroZ
-	OrientationPitch
-	OrientationYaw
-	OrientationRoll
 )
 
 var sdlKeyMap = map[notasdl.Key]StateInput{
-	notasdl.Key(sdl.K_SPACE):        KeySpace,
-	notasdl.Key(sdl.K_APOSTROPHE):   KeyApostrophe,
-	notasdl.Key(sdl.K_COMMA):        KeyComma,
-	notasdl.Key(sdl.K_MINUS):        KeyMinus,
-	notasdl.Key(sdl.K_PERIOD):       KeyPeriod,
-	notasdl.Key(sdl.K_SLASH):        KeySlash,
-	notasdl.Key(sdl.K_0):            Key0,
-	notasdl.Key(sdl.K_1):            Key1,
-	notasdl.Key(sdl.K_2):            Key2,
-	notasdl.Key(sdl.K_3):            Key3,
-	notasdl.Key(sdl.K_4):            Key4,
-	notasdl.Key(sdl.K_5):            Key5,
-	notasdl.Key(sdl.K_6):            Key6,
-	notasdl.Key(sdl.K_7):            Key7,
-	notasdl.Key(sdl.K_8):            Key8,
-	notasdl.Key(sdl.K_9):            Key9,
-	notasdl.Key(sdl.K_SEMICOLON):    KeySemicolon,
-	notasdl.Key(sdl.K_EQUALS):       KeyEqual,
-	notasdl.Key(sdl.K_A):            KeyA,
-	notasdl.Key(sdl.K_B):            KeyB,
-	notasdl.Key(sdl.K_C):            KeyC,
-	notasdl.Key(sdl.K_D):            KeyD,
-	notasdl.Key(sdl.K_E):            KeyE,
-	notasdl.Key(sdl.K_F):            KeyF,
-	notasdl.Key(sdl.K_G):            KeyG,
-	notasdl.Key(sdl.K_H):            KeyH,
-	notasdl.Key(sdl.K_I):            KeyI,
-	notasdl.Key(sdl.K_J):            KeyJ,
-	notasdl.Key(sdl.K_K):            KeyK,
-	notasdl.Key(sdl.K_L):            KeyL,
-	notasdl.Key(sdl.K_M):            KeyM,
-	notasdl.Key(sdl.K_N):            KeyN,
-	notasdl.Key(sdl.K_O):            KeyO,
-	notasdl.Key(sdl.K_P):            KeyP,
-	notasdl.Key(sdl.K_Q):            KeyQ,
-	notasdl.Key(sdl.K_R):            KeyR,
-	notasdl.Key(sdl.K_S):            KeyS,
-	notasdl.Key(sdl.K_T):            KeyT,
-	notasdl.Key(sdl.K_U):            KeyU,
-	notasdl.Key(sdl.K_V):            KeyV,
-	notasdl.Key(sdl.K_W):            KeyW,
-	notasdl.Key(sdl.K_X):            KeyX,
-	notasdl.Key(sdl.K_Y):            KeyY,
-	notasdl.Key(sdl.K_Z):            KeyZ,
-	notasdl.Key(sdl.K_LEFTBRACKET):  KeyLeftBracket,
-	notasdl.Key(sdl.K_BACKSLASH):    KeyBackslash,
-	notasdl.Key(sdl.K_RIGHTBRACKET): KeyRightBracket,
-	notasdl.Key(sdl.K_GRAVE):        KeyGraveAccent,
-	notasdl.Key(sdl.K_ESCAPE):       KeyEscape,
-	notasdl.Key(sdl.K_RETURN):       KeyEnter,
-	notasdl.Key(sdl.K_TAB):          KeyTab,
-	notasdl.Key(sdl.K_BACKSPACE):    KeyBackspace,
-	notasdl.Key(sdl.K_INSERT):       KeyInsert,
-	notasdl.Key(sdl.K_DELETE):       KeyDelete,
-	notasdl.Key(sdl.K_RIGHT):        KeyRight,
-	notasdl.Key(sdl.K_LEFT):         KeyLeft,
-	notasdl.Key(sdl.K_DOWN):         KeyDown,
-	notasdl.Key(sdl.K_UP):           KeyUp,
-	notasdl.Key(sdl.K_PAGEUP):       KeyPageUp,
-	notasdl.Key(sdl.K_PAGEDOWN):     KeyPageDown,
-	notasdl.Key(sdl.K_HOME):         KeyHome,
-	notasdl.Key(sdl.K_END):          KeyEnd,
-	notasdl.Key(sdl.K_CAPSLOCK):     KeyCapsLock,
-	notasdl.Key(sdl.K_SCROLLLOCK):   KeyScrollLock,
-	notasdl.Key(sdl.K_NUMLOCKCLEAR): KeyNumLock,
-	notasdl.Key(sdl.K_PRINTSCREEN):  KeyPrintScreen,
-	notasdl.Key(sdl.K_PAUSE):        KeyPause,
-	notasdl.Key(sdl.K_F1):           KeyF1,
-	notasdl.Key(sdl.K_F2):           KeyF2,
-	notasdl.Key(sdl.K_F3):           KeyF3,
-	notasdl.Key(sdl.K_F4):           KeyF4,
-	notasdl.Key(sdl.K_F5):           KeyF5,
-	notasdl.Key(sdl.K_F6):           KeyF6,
-	notasdl.Key(sdl.K_F7):           KeyF7,
-	notasdl.Key(sdl.K_F8):           KeyF8,
-	notasdl.Key(sdl.K_F9):           KeyF9,
-	notasdl.Key(sdl.K_F10):          KeyF10,
-	notasdl.Key(sdl.K_F11):          KeyF11,
-	notasdl.Key(sdl.K_F12):          KeyF12,
-	notasdl.Key(sdl.K_F13):          KeyF13,
-	notasdl.Key(sdl.K_F14):          KeyF14,
-	notasdl.Key(sdl.K_F15):          KeyF15,
-	notasdl.Key(sdl.K_F16):          KeyF16,
-	notasdl.Key(sdl.K_F17):          KeyF17,
-	notasdl.Key(sdl.K_F18):          KeyF18,
-	notasdl.Key(sdl.K_F19):          KeyF19,
-	notasdl.Key(sdl.K_F20):          KeyF20,
-	notasdl.Key(sdl.K_F21):          KeyF21,
-	notasdl.Key(sdl.K_F22):          KeyF22,
-	notasdl.Key(sdl.K_F23):          KeyF23,
-	notasdl.Key(sdl.K_F24):          KeyF24,
-	notasdl.Key(sdl.K_KP_0):         KeyKP0,
-	notasdl.Key(sdl.K_KP_1):         KeyKP1,
-	notasdl.Key(sdl.K_KP_2):         KeyKP2,
-	notasdl.Key(sdl.K_KP_3):         KeyKP3,
-	notasdl.Key(sdl.K_KP_4):         KeyKP4,
-	notasdl.Key(sdl.K_KP_5):         KeyKP5,
-	notasdl.Key(sdl.K_KP_6):         KeyKP6,
-	notasdl.Key(sdl.K_KP_7):         KeyKP7,
-	notasdl.Key(sdl.K_KP_8):         KeyKP8,
-	notasdl.Key(sdl.K_KP_9):         KeyKP9,
-	notasdl.Key(sdl.K_KP_PERIOD):    KeyKPDecimal,
-	notasdl.Key(sdl.K_KP_DIVIDE):    KeyKPDivide,
-	notasdl.Key(sdl.K_KP_MULTIPLY):  KeyKPMultiply,
-	notasdl.Key(sdl.K_KP_MINUS):     KeyKPSubtract,
-	notasdl.Key(sdl.K_KP_PLUS):      KeyKPAdd,
-	notasdl.Key(sdl.K_KP_ENTER):     KeyKPEnter,
-	notasdl.Key(sdl.K_KP_EQUALS):    KeyKPEqual,
-	notasdl.Key(sdl.K_LSHIFT):       KeyLeftShift,
-	notasdl.Key(sdl.K_LCTRL):        KeyLeftControl,
-	notasdl.Key(sdl.K_LALT):         KeyLeftAlt,
-	notasdl.Key(sdl.K_LGUI):         KeyLeftSuper,
-	notasdl.Key(sdl.K_RSHIFT):       KeyRightShift,
-	notasdl.Key(sdl.K_RCTRL):        KeyRightControl,
-	notasdl.Key(sdl.K_RALT):         KeyRightAlt,
-	notasdl.Key(sdl.K_RGUI):         KeyRightSuper,
-	notasdl.Key(sdl.K_MENU):         KeyMenu,
+	notasdl.Key(sdl.K_SPACE):                KeySpace,
+	notasdl.Key(sdl.K_APOSTROPHE):           KeyApostrophe,
+	notasdl.Key(sdl.K_COMMA):                KeyComma,
+	notasdl.Key(sdl.K_MINUS):                KeyMinus,
+	notasdl.Key(sdl.K_PERIOD):               KeyPeriod,
+	notasdl.Key(sdl.K_SLASH):                KeySlash,
+	notasdl.Key(sdl.K_0):                    Key0,
+	notasdl.Key(sdl.K_1):                    Key1,
+	notasdl.Key(sdl.K_2):                    Key2,
+	notasdl.Key(sdl.K_3):                    Key3,
+	notasdl.Key(sdl.K_4):                    Key4,
+	notasdl.Key(sdl.K_5):                    Key5,
+	notasdl.Key(sdl.K_6):                    Key6,
+	notasdl.Key(sdl.K_7):                    Key7,
+	notasdl.Key(sdl.K_8):                    Key8,
+	notasdl.Key(sdl.K_9):                    Key9,
+	notasdl.Key(sdl.K_SEMICOLON):            KeySemicolon,
+	notasdl.Key(sdl.K_EQUALS):               KeyEqual,
+	notasdl.Key(sdl.K_A):                    KeyA,
+	notasdl.Key(sdl.K_B):                    KeyB,
+	notasdl.Key(sdl.K_C):                    KeyC,
+	notasdl.Key(sdl.K_D):                    KeyD,
+	notasdl.Key(sdl.K_E):                    KeyE,
+	notasdl.Key(sdl.K_F):                    KeyF,
+	notasdl.Key(sdl.K_G):                    KeyG,
+	notasdl.Key(sdl.K_H):                    KeyH,
+	notasdl.Key(sdl.K_I):                    KeyI,
+	notasdl.Key(sdl.K_J):                    KeyJ,
+	notasdl.Key(sdl.K_K):                    KeyK,
+	notasdl.Key(sdl.K_L):                    KeyL,
+	notasdl.Key(sdl.K_M):                    KeyM,
+	notasdl.Key(sdl.K_N):                    KeyN,
+	notasdl.Key(sdl.K_O):                    KeyO,
+	notasdl.Key(sdl.K_P):                    KeyP,
+	notasdl.Key(sdl.K_Q):                    KeyQ,
+	notasdl.Key(sdl.K_R):                    KeyR,
+	notasdl.Key(sdl.K_S):                    KeyS,
+	notasdl.Key(sdl.K_T):                    KeyT,
+	notasdl.Key(sdl.K_U):                    KeyU,
+	notasdl.Key(sdl.K_V):                    KeyV,
+	notasdl.Key(sdl.K_W):                    KeyW,
+	notasdl.Key(sdl.K_X):                    KeyX,
+	notasdl.Key(sdl.K_Y):                    KeyY,
+	notasdl.Key(sdl.K_Z):                    KeyZ,
+	notasdl.Key(sdl.K_LEFTBRACKET):          KeyLeftBracket,
+	notasdl.Key(sdl.K_BACKSLASH):            KeyBackslash,
+	notasdl.Key(sdl.K_RIGHTBRACKET):         KeyRightBracket,
+	notasdl.Key(sdl.K_GRAVE):                KeyGraveAccent,
+	notasdl.Key(sdl.K_ESCAPE):               KeyEscape,
+	notasdl.Key(sdl.K_RETURN):               KeyEnter,
+	notasdl.Key(sdl.K_TAB):                  KeyTab,
+	notasdl.Key(sdl.K_BACKSPACE):            KeyBackspace,
+	notasdl.Key(sdl.K_INSERT):               KeyInsert,
+	notasdl.Key(sdl.K_DELETE):               KeyDelete,
+	notasdl.Key(sdl.K_RIGHT):                KeyRight,
+	notasdl.Key(sdl.K_LEFT):                 KeyLeft,
+	notasdl.Key(sdl.K_DOWN):                 KeyDown,
+	notasdl.Key(sdl.K_UP):                   KeyUp,
+	notasdl.Key(sdl.K_PAGEUP):               KeyPageUp,
+	notasdl.Key(sdl.K_PAGEDOWN):             KeyPageDown,
+	notasdl.Key(sdl.K_HOME):                 KeyHome,
+	notasdl.Key(sdl.K_END):                  KeyEnd,
+	notasdl.Key(sdl.K_CAPSLOCK):             KeyCapsLock,
+	notasdl.Key(sdl.K_SCROLLLOCK):           KeyScrollLock,
+	notasdl.Key(sdl.K_NUMLOCKCLEAR):         KeyNumLock,
+	notasdl.Key(sdl.K_PRINTSCREEN):          KeyPrintScreen,
+	notasdl.Key(sdl.K_PAUSE):                KeyPause,
+	notasdl.Key(sdl.K_F1):                   KeyF1,
+	notasdl.Key(sdl.K_F2):                   KeyF2,
+	notasdl.Key(sdl.K_F3):                   KeyF3,
+	notasdl.Key(sdl.K_F4):                   KeyF4,
+	notasdl.Key(sdl.K_F5):                   KeyF5,
+	notasdl.Key(sdl.K_F6):                   KeyF6,
+	notasdl.Key(sdl.K_F7):                   KeyF7,
+	notasdl.Key(sdl.K_F8):                   KeyF8,
+	notasdl.Key(sdl.K_F9):                   KeyF9,
+	notasdl.Key(sdl.K_F10):                  KeyF10,
+	notasdl.Key(sdl.K_F11):                  KeyF11,
+	notasdl.Key(sdl.K_F12):                  KeyF12,
+	notasdl.Key(sdl.K_F13):                  KeyF13,
+	notasdl.Key(sdl.K_F14):                  KeyF14,
+	notasdl.Key(sdl.K_F15):                  KeyF15,
+	notasdl.Key(sdl.K_F16):                  KeyF16,
+	notasdl.Key(sdl.K_F17):                  KeyF17,
+	notasdl.Key(sdl.K_F18):                  KeyF18,
+	notasdl.Key(sdl.K_F19):                  KeyF19,
+	notasdl.Key(sdl.K_F20):                  KeyF20,
+	notasdl.Key(sdl.K_F21):                  KeyF21,
+	notasdl.Key(sdl.K_F22):                  KeyF22,
+	notasdl.Key(sdl.K_F23):                  KeyF23,
+	notasdl.Key(sdl.K_F24):                  KeyF24,
+	notasdl.Key(sdl.K_KP_0):                 KeyKP0,
+	notasdl.Key(sdl.K_KP_1):                 KeyKP1,
+	notasdl.Key(sdl.K_KP_2):                 KeyKP2,
+	notasdl.Key(sdl.K_KP_3):                 KeyKP3,
+	notasdl.Key(sdl.K_KP_4):                 KeyKP4,
+	notasdl.Key(sdl.K_KP_5):                 KeyKP5,
+	notasdl.Key(sdl.K_KP_6):                 KeyKP6,
+	notasdl.Key(sdl.K_KP_7):                 KeyKP7,
+	notasdl.Key(sdl.K_KP_8):                 KeyKP8,
+	notasdl.Key(sdl.K_KP_9):                 KeyKP9,
+	notasdl.Key(sdl.K_KP_PERIOD):            KeyKPDecimal,
+	notasdl.Key(sdl.K_KP_DIVIDE):            KeyKPDivide,
+	notasdl.Key(sdl.K_KP_MULTIPLY):          KeyKPMultiply,
+	notasdl.Key(sdl.K_KP_MINUS):             KeyKPSubtract,
+	notasdl.Key(sdl.K_KP_PLUS):              KeyKPAdd,
+	notasdl.Key(sdl.K_KP_ENTER):             KeyKPEnter,
+	notasdl.Key(sdl.K_KP_EQUALS):            KeyKPEqual,
+	notasdl.Key(sdl.K_LSHIFT):               KeyLeftShift,
+	notasdl.Key(sdl.K_LCTRL):                KeyLeftControl,
+	notasdl.Key(sdl.K_LALT):                 KeyLeftAlt,
+	notasdl.Key(sdl.K_LGUI):                 KeyLeftSuper,
+	notasdl.Key(sdl.K_RSHIFT):               KeyRightShift,
+	notasdl.Key(sdl.K_RCTRL):                KeyRightControl,
+	notasdl.Key(sdl.K_RALT):                 KeyRightAlt,
+	notasdl.Key(sdl.K_RGUI):                 KeyRightSuper,
+	notasdl.Key(sdl.K_MENU):                 KeyMenu,
+	notasdl.Key(sdl.K_MEDIA_PLAY_PAUSE):     KeyMediaPlayPause,
+	notasdl.Key(sdl.K_MEDIA_STOP):           KeyMediaStop,
+	notasdl.Key(sdl.K_MEDIA_NEXT_TRACK):     KeyMediaNext,
+	notasdl.Key(sdl.K_MEDIA_PREVIOUS_TRACK): KeyMediaPrev,
+	notasdl.Key(sdl.K_VOLUMEUP):             KeyVolumeUp,
+	notasdl.Key(sdl.K_VOLUMEDOWN):           KeyVolumeDown,
 }
 
 var sdlMouseButtonMap = map[notasdl.MouseButton]StateInput{
