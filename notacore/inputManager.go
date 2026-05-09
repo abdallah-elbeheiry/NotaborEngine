@@ -1,16 +1,16 @@
 package notacore
 
 import (
-	"NotaborEngine/notatask"
+	"NotaborEngine/notasdl"
 	"sync"
 
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/Zyko0/go-sdl3/sdl"
 )
 
-type Input int
+type StateInput int
 
 const (
-	KeySpace Input = iota
+	KeySpace StateInput = iota
 	KeyApostrophe
 	KeyComma
 	KeyMinus
@@ -240,323 +240,227 @@ const (
 	OrientationRoll
 )
 
-var glfwKeyMap = map[Input]glfw.Key{
-	KeySpace:        glfw.KeySpace,
-	KeyApostrophe:   glfw.KeyApostrophe,
-	KeyComma:        glfw.KeyComma,
-	KeyMinus:        glfw.KeyMinus,
-	KeyPeriod:       glfw.KeyPeriod,
-	KeySlash:        glfw.KeySlash,
-	Key0:            glfw.Key0,
-	Key1:            glfw.Key1,
-	Key2:            glfw.Key2,
-	Key3:            glfw.Key3,
-	Key4:            glfw.Key4,
-	Key5:            glfw.Key5,
-	Key6:            glfw.Key6,
-	Key7:            glfw.Key7,
-	Key8:            glfw.Key8,
-	Key9:            glfw.Key9,
-	KeySemicolon:    glfw.KeySemicolon,
-	KeyEqual:        glfw.KeyEqual,
-	KeyA:            glfw.KeyA,
-	KeyB:            glfw.KeyB,
-	KeyC:            glfw.KeyC,
-	KeyD:            glfw.KeyD,
-	KeyE:            glfw.KeyE,
-	KeyF:            glfw.KeyF,
-	KeyG:            glfw.KeyG,
-	KeyH:            glfw.KeyH,
-	KeyI:            glfw.KeyI,
-	KeyJ:            glfw.KeyJ,
-	KeyK:            glfw.KeyK,
-	KeyL:            glfw.KeyL,
-	KeyM:            glfw.KeyM,
-	KeyN:            glfw.KeyN,
-	KeyO:            glfw.KeyO,
-	KeyP:            glfw.KeyP,
-	KeyQ:            glfw.KeyQ,
-	KeyR:            glfw.KeyR,
-	KeyS:            glfw.KeyS,
-	KeyT:            glfw.KeyT,
-	KeyU:            glfw.KeyU,
-	KeyV:            glfw.KeyV,
-	KeyW:            glfw.KeyW,
-	KeyX:            glfw.KeyX,
-	KeyY:            glfw.KeyY,
-	KeyZ:            glfw.KeyZ,
-	KeyLeftBracket:  glfw.KeyLeftBracket,
-	KeyBackslash:    glfw.KeyBackslash,
-	KeyRightBracket: glfw.KeyRightBracket,
-	KeyGraveAccent:  glfw.KeyGraveAccent,
-
-	KeyEscape:      glfw.KeyEscape,
-	KeyEnter:       glfw.KeyEnter,
-	KeyTab:         glfw.KeyTab,
-	KeyBackspace:   glfw.KeyBackspace,
-	KeyInsert:      glfw.KeyInsert,
-	KeyDelete:      glfw.KeyDelete,
-	KeyRight:       glfw.KeyRight,
-	KeyLeft:        glfw.KeyLeft,
-	KeyDown:        glfw.KeyDown,
-	KeyUp:          glfw.KeyUp,
-	KeyPageUp:      glfw.KeyPageUp,
-	KeyPageDown:    glfw.KeyPageDown,
-	KeyHome:        glfw.KeyHome,
-	KeyEnd:         glfw.KeyEnd,
-	KeyCapsLock:    glfw.KeyCapsLock,
-	KeyScrollLock:  glfw.KeyScrollLock,
-	KeyNumLock:     glfw.KeyNumLock,
-	KeyPrintScreen: glfw.KeyPrintScreen,
-	KeyPause:       glfw.KeyPause,
-
-	KeyF1:  glfw.KeyF1,
-	KeyF2:  glfw.KeyF2,
-	KeyF3:  glfw.KeyF3,
-	KeyF4:  glfw.KeyF4,
-	KeyF5:  glfw.KeyF5,
-	KeyF6:  glfw.KeyF6,
-	KeyF7:  glfw.KeyF7,
-	KeyF8:  glfw.KeyF8,
-	KeyF9:  glfw.KeyF9,
-	KeyF10: glfw.KeyF10,
-	KeyF11: glfw.KeyF11,
-	KeyF12: glfw.KeyF12,
-	KeyF13: glfw.KeyF13,
-	KeyF14: glfw.KeyF14,
-	KeyF15: glfw.KeyF15,
-	KeyF16: glfw.KeyF16,
-	KeyF17: glfw.KeyF17,
-	KeyF18: glfw.KeyF18,
-	KeyF19: glfw.KeyF19,
-	KeyF20: glfw.KeyF20,
-	KeyF21: glfw.KeyF21,
-	KeyF22: glfw.KeyF22,
-	KeyF23: glfw.KeyF23,
-	KeyF24: glfw.KeyF24,
-	KeyF25: glfw.KeyF25,
-
-	KeyKP0:        glfw.KeyKP0,
-	KeyKP1:        glfw.KeyKP1,
-	KeyKP2:        glfw.KeyKP2,
-	KeyKP3:        glfw.KeyKP3,
-	KeyKP4:        glfw.KeyKP4,
-	KeyKP5:        glfw.KeyKP5,
-	KeyKP6:        glfw.KeyKP6,
-	KeyKP7:        glfw.KeyKP7,
-	KeyKP8:        glfw.KeyKP8,
-	KeyKP9:        glfw.KeyKP9,
-	KeyKPDecimal:  glfw.KeyKPDecimal,
-	KeyKPDivide:   glfw.KeyKPDivide,
-	KeyKPMultiply: glfw.KeyKPMultiply,
-	KeyKPSubtract: glfw.KeyKPSubtract,
-	KeyKPAdd:      glfw.KeyKPAdd,
-	KeyKPEnter:    glfw.KeyKPEnter,
-	KeyKPEqual:    glfw.KeyKPEqual,
-
-	KeyLeftShift:    glfw.KeyLeftShift,
-	KeyLeftControl:  glfw.KeyLeftControl,
-	KeyLeftAlt:      glfw.KeyLeftAlt,
-	KeyLeftSuper:    glfw.KeyLeftSuper,
-	KeyRightShift:   glfw.KeyRightShift,
-	KeyRightControl: glfw.KeyRightControl,
-	KeyRightAlt:     glfw.KeyRightAlt,
-	KeyRightSuper:   glfw.KeyRightSuper,
-
-	KeyMenu: glfw.KeyMenu,
-
-	// Notes:
-	// KeyLeftCommand/KeyRightCommand/KeyOptionLeft/KeyOptionRight/KeyFn are not part of GLFW's key enum.
-	// GLFW does not expose media/volume/brightness keys in a cross-platform way.
+var sdlKeyMap = map[notasdl.Key]StateInput{
+	notasdl.Key(sdl.K_SPACE):        KeySpace,
+	notasdl.Key(sdl.K_APOSTROPHE):   KeyApostrophe,
+	notasdl.Key(sdl.K_COMMA):        KeyComma,
+	notasdl.Key(sdl.K_MINUS):        KeyMinus,
+	notasdl.Key(sdl.K_PERIOD):       KeyPeriod,
+	notasdl.Key(sdl.K_SLASH):        KeySlash,
+	notasdl.Key(sdl.K_0):            Key0,
+	notasdl.Key(sdl.K_1):            Key1,
+	notasdl.Key(sdl.K_2):            Key2,
+	notasdl.Key(sdl.K_3):            Key3,
+	notasdl.Key(sdl.K_4):            Key4,
+	notasdl.Key(sdl.K_5):            Key5,
+	notasdl.Key(sdl.K_6):            Key6,
+	notasdl.Key(sdl.K_7):            Key7,
+	notasdl.Key(sdl.K_8):            Key8,
+	notasdl.Key(sdl.K_9):            Key9,
+	notasdl.Key(sdl.K_SEMICOLON):    KeySemicolon,
+	notasdl.Key(sdl.K_EQUALS):       KeyEqual,
+	notasdl.Key(sdl.K_A):            KeyA,
+	notasdl.Key(sdl.K_B):            KeyB,
+	notasdl.Key(sdl.K_C):            KeyC,
+	notasdl.Key(sdl.K_D):            KeyD,
+	notasdl.Key(sdl.K_E):            KeyE,
+	notasdl.Key(sdl.K_F):            KeyF,
+	notasdl.Key(sdl.K_G):            KeyG,
+	notasdl.Key(sdl.K_H):            KeyH,
+	notasdl.Key(sdl.K_I):            KeyI,
+	notasdl.Key(sdl.K_J):            KeyJ,
+	notasdl.Key(sdl.K_K):            KeyK,
+	notasdl.Key(sdl.K_L):            KeyL,
+	notasdl.Key(sdl.K_M):            KeyM,
+	notasdl.Key(sdl.K_N):            KeyN,
+	notasdl.Key(sdl.K_O):            KeyO,
+	notasdl.Key(sdl.K_P):            KeyP,
+	notasdl.Key(sdl.K_Q):            KeyQ,
+	notasdl.Key(sdl.K_R):            KeyR,
+	notasdl.Key(sdl.K_S):            KeyS,
+	notasdl.Key(sdl.K_T):            KeyT,
+	notasdl.Key(sdl.K_U):            KeyU,
+	notasdl.Key(sdl.K_V):            KeyV,
+	notasdl.Key(sdl.K_W):            KeyW,
+	notasdl.Key(sdl.K_X):            KeyX,
+	notasdl.Key(sdl.K_Y):            KeyY,
+	notasdl.Key(sdl.K_Z):            KeyZ,
+	notasdl.Key(sdl.K_LEFTBRACKET):  KeyLeftBracket,
+	notasdl.Key(sdl.K_BACKSLASH):    KeyBackslash,
+	notasdl.Key(sdl.K_RIGHTBRACKET): KeyRightBracket,
+	notasdl.Key(sdl.K_GRAVE):        KeyGraveAccent,
+	notasdl.Key(sdl.K_ESCAPE):       KeyEscape,
+	notasdl.Key(sdl.K_RETURN):       KeyEnter,
+	notasdl.Key(sdl.K_TAB):          KeyTab,
+	notasdl.Key(sdl.K_BACKSPACE):    KeyBackspace,
+	notasdl.Key(sdl.K_INSERT):       KeyInsert,
+	notasdl.Key(sdl.K_DELETE):       KeyDelete,
+	notasdl.Key(sdl.K_RIGHT):        KeyRight,
+	notasdl.Key(sdl.K_LEFT):         KeyLeft,
+	notasdl.Key(sdl.K_DOWN):         KeyDown,
+	notasdl.Key(sdl.K_UP):           KeyUp,
+	notasdl.Key(sdl.K_PAGEUP):       KeyPageUp,
+	notasdl.Key(sdl.K_PAGEDOWN):     KeyPageDown,
+	notasdl.Key(sdl.K_HOME):         KeyHome,
+	notasdl.Key(sdl.K_END):          KeyEnd,
+	notasdl.Key(sdl.K_CAPSLOCK):     KeyCapsLock,
+	notasdl.Key(sdl.K_SCROLLLOCK):   KeyScrollLock,
+	notasdl.Key(sdl.K_NUMLOCKCLEAR): KeyNumLock,
+	notasdl.Key(sdl.K_PRINTSCREEN):  KeyPrintScreen,
+	notasdl.Key(sdl.K_PAUSE):        KeyPause,
+	notasdl.Key(sdl.K_F1):           KeyF1,
+	notasdl.Key(sdl.K_F2):           KeyF2,
+	notasdl.Key(sdl.K_F3):           KeyF3,
+	notasdl.Key(sdl.K_F4):           KeyF4,
+	notasdl.Key(sdl.K_F5):           KeyF5,
+	notasdl.Key(sdl.K_F6):           KeyF6,
+	notasdl.Key(sdl.K_F7):           KeyF7,
+	notasdl.Key(sdl.K_F8):           KeyF8,
+	notasdl.Key(sdl.K_F9):           KeyF9,
+	notasdl.Key(sdl.K_F10):          KeyF10,
+	notasdl.Key(sdl.K_F11):          KeyF11,
+	notasdl.Key(sdl.K_F12):          KeyF12,
+	notasdl.Key(sdl.K_F13):          KeyF13,
+	notasdl.Key(sdl.K_F14):          KeyF14,
+	notasdl.Key(sdl.K_F15):          KeyF15,
+	notasdl.Key(sdl.K_F16):          KeyF16,
+	notasdl.Key(sdl.K_F17):          KeyF17,
+	notasdl.Key(sdl.K_F18):          KeyF18,
+	notasdl.Key(sdl.K_F19):          KeyF19,
+	notasdl.Key(sdl.K_F20):          KeyF20,
+	notasdl.Key(sdl.K_F21):          KeyF21,
+	notasdl.Key(sdl.K_F22):          KeyF22,
+	notasdl.Key(sdl.K_F23):          KeyF23,
+	notasdl.Key(sdl.K_F24):          KeyF24,
+	notasdl.Key(sdl.K_KP_0):         KeyKP0,
+	notasdl.Key(sdl.K_KP_1):         KeyKP1,
+	notasdl.Key(sdl.K_KP_2):         KeyKP2,
+	notasdl.Key(sdl.K_KP_3):         KeyKP3,
+	notasdl.Key(sdl.K_KP_4):         KeyKP4,
+	notasdl.Key(sdl.K_KP_5):         KeyKP5,
+	notasdl.Key(sdl.K_KP_6):         KeyKP6,
+	notasdl.Key(sdl.K_KP_7):         KeyKP7,
+	notasdl.Key(sdl.K_KP_8):         KeyKP8,
+	notasdl.Key(sdl.K_KP_9):         KeyKP9,
+	notasdl.Key(sdl.K_KP_PERIOD):    KeyKPDecimal,
+	notasdl.Key(sdl.K_KP_DIVIDE):    KeyKPDivide,
+	notasdl.Key(sdl.K_KP_MULTIPLY):  KeyKPMultiply,
+	notasdl.Key(sdl.K_KP_MINUS):     KeyKPSubtract,
+	notasdl.Key(sdl.K_KP_PLUS):      KeyKPAdd,
+	notasdl.Key(sdl.K_KP_ENTER):     KeyKPEnter,
+	notasdl.Key(sdl.K_KP_EQUALS):    KeyKPEqual,
+	notasdl.Key(sdl.K_LSHIFT):       KeyLeftShift,
+	notasdl.Key(sdl.K_LCTRL):        KeyLeftControl,
+	notasdl.Key(sdl.K_LALT):         KeyLeftAlt,
+	notasdl.Key(sdl.K_LGUI):         KeyLeftSuper,
+	notasdl.Key(sdl.K_RSHIFT):       KeyRightShift,
+	notasdl.Key(sdl.K_RCTRL):        KeyRightControl,
+	notasdl.Key(sdl.K_RALT):         KeyRightAlt,
+	notasdl.Key(sdl.K_RGUI):         KeyRightSuper,
+	notasdl.Key(sdl.K_MENU):         KeyMenu,
 }
 
-var glfwMouseButtonMap = map[Input]glfw.MouseButton{
-	MouseLeft:    glfw.MouseButtonLeft,
-	MouseRight:   glfw.MouseButtonRight,
-	MouseMiddle:  glfw.MouseButtonMiddle,
-	MouseButton4: glfw.MouseButton4,
-	MouseButton5: glfw.MouseButton5,
-	MouseButton6: glfw.MouseButton6,
-	MouseButton7: glfw.MouseButton7,
-	MouseButton8: glfw.MouseButton8,
+var sdlMouseButtonMap = map[notasdl.MouseButton]StateInput{
+	notasdl.MouseButton(sdl.BUTTON_LEFT):   MouseLeft,
+	notasdl.MouseButton(sdl.BUTTON_RIGHT):  MouseRight,
+	notasdl.MouseButton(sdl.BUTTON_MIDDLE): MouseMiddle,
+	notasdl.MouseButton(sdl.BUTTON_X1):     MouseButton4,
+	notasdl.MouseButton(sdl.BUTTON_X2):     MouseButton5,
+	notasdl.MouseButton(6):                 MouseButton6,
+	notasdl.MouseButton(7):                 MouseButton7,
+	notasdl.MouseButton(8):                 MouseButton8,
 }
 
-var glfwGamepadButtonMap = map[Input]glfw.GamepadButton{
-	PadA:          glfw.ButtonA,
-	PadB:          glfw.ButtonB,
-	PadX:          glfw.ButtonX,
-	PadY:          glfw.ButtonY,
-	PadLB:         glfw.ButtonLeftBumper,
-	PadRB:         glfw.ButtonRightBumper,
-	PadBack:       glfw.ButtonBack,
-	PadStart:      glfw.ButtonStart,
-	PadGuide:      glfw.ButtonGuide,
-	PadLeftThumb:  glfw.ButtonLeftThumb,
-	PadRightThumb: glfw.ButtonRightThumb,
-	PadDpadUp:     glfw.ButtonDpadUp,
-	PadDpadRight:  glfw.ButtonDpadRight,
-	PadDpadDown:   glfw.ButtonDpadDown,
-	PadDpadLeft:   glfw.ButtonDpadLeft,
+var sdlGamepadButtonMap = map[notasdl.GamepadButton]StateInput{
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_SOUTH):          PadA,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_EAST):           PadB,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_WEST):           PadX,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_NORTH):          PadY,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_LEFT_SHOULDER):  PadLB,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_RIGHT_SHOULDER): PadRB,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_BACK):           PadBack,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_START):          PadStart,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_GUIDE):          PadGuide,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_LEFT_STICK):     PadLeftThumb,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_RIGHT_STICK):    PadRightThumb,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_DPAD_UP):        PadDpadUp,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_DPAD_RIGHT):     PadDpadRight,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_DPAD_DOWN):      PadDpadDown,
+	notasdl.GamepadButton(sdl.GAMEPAD_BUTTON_DPAD_LEFT):      PadDpadLeft,
 }
 
-var glfwGamepadAxisMap = map[Input]glfw.GamepadAxis{
-	PadAxisLeftX:        glfw.AxisLeftX,
-	PadAxisLeftY:        glfw.AxisLeftY,
-	PadAxisRightX:       glfw.AxisRightX,
-	PadAxisRightY:       glfw.AxisRightY,
-	PadAxisLeftTrigger:  glfw.AxisLeftTrigger,
-	PadAxisRightTrigger: glfw.AxisRightTrigger,
+var sdlGamepadAxisMap = map[notasdl.GamepadAxis]StateInput{
+	notasdl.GamepadAxis(sdl.GAMEPAD_AXIS_LEFTX):         PadAxisLeftX,
+	notasdl.GamepadAxis(sdl.GAMEPAD_AXIS_LEFTY):         PadAxisLeftY,
+	notasdl.GamepadAxis(sdl.GAMEPAD_AXIS_RIGHTX):        PadAxisRightX,
+	notasdl.GamepadAxis(sdl.GAMEPAD_AXIS_RIGHTY):        PadAxisRightY,
+	notasdl.GamepadAxis(sdl.GAMEPAD_AXIS_LEFT_TRIGGER):  PadAxisLeftTrigger,
+	notasdl.GamepadAxis(sdl.GAMEPAD_AXIS_RIGHT_TRIGGER): PadAxisRightTrigger,
 }
 
 type InputManager struct {
-	inputToSignal  map[Input][]*InputSignal
-	signalToAction map[*InputSignal][]*Action
-
-	mu     sync.RWMutex
-	active map[Input]bool // latest captured GLFW state
-	loop   *notatask.Loop
+	ctx     *InputContext
+	signals map[string]*InputSignal
+	mu      sync.RWMutex
 }
 
-// updateSignals should be called once per logic tick (Loop).
-// It snapshots last state and applies the latest captured state.
-func (im *InputManager) updateSignals() {
+// NewInputManager creates a new input manager
+func NewInputManager() *InputManager {
+	return &InputManager{
+		ctx:     NewInputContext(),
+		signals: make(map[string]*InputSignal),
+	}
+}
+
+// GetContext returns the input context for direct access if needed
+func (im *InputManager) GetContext() *InputContext {
+	return im.ctx
+}
+
+// Get retrieves a previously bound signal by name
+func (im *InputManager) Get(name string) *InputSignal {
 	im.mu.RLock()
 	defer im.mu.RUnlock()
-
-	// Snapshot all signals exactly once per tick
-	seenSignals := make(map[*InputSignal]bool)
-	for _, signals := range im.inputToSignal {
-		for _, sig := range signals {
-			if sig != nil && !seenSignals[sig] {
-				sig.Snapshot()
-				sig.Set(false)
-				seenSignals[sig] = true
-			}
-		}
-	}
-
-	for input, signals := range im.inputToSignal {
-		active := im.active[input]
-		if active {
-			for _, sig := range signals {
-				if sig != nil {
-					sig.Set(true)
-				}
-			}
-		}
-	}
+	return im.signals[name]
 }
 
-//func isInputActive(win *Window, input Input, gamepads []*glfw.GamepadState) bool {
-//	if key, ok := glfwKeyMap[input]; ok {
-//		return win.GLFW().GetKey(key) == glfw.Press
-//	}
-//
-//	if btn, ok := glfwMouseButtonMap[input]; ok {
-//		return win.GLFW().GetMouseButton(btn) == glfw.Press
-//	}
-//
-//	if len(gamepads) == 0 {
-//		return false
-//	}
-//
-//	if btn, ok := glfwGamepadButtonMap[input]; ok {
-//		for _, st := range gamepads {
-//			if st != nil && st.Buttons[btn] == glfw.Press {
-//				return true
-//			}
-//		}
-//		return false
-//	}
-//
-//	if axis, ok := glfwGamepadAxisMap[input]; ok {
-//		const deadzone = float32(0.2)
-//		for _, st := range gamepads {
-//			if st == nil {
-//				continue
-//			}
-//			v := st.Axes[axis]
-//			if v > deadzone || v < -deadzone {
-//				return true
-//			}
-//		}
-//		return false
-//	}
-//
-//	return false
-//}
+// BeginFrame should be called at the start of each frame to update input states
+func (im *InputManager) BeginFrame() {
+	im.ctx.BeginFrame()
+}
 
-func connectedGamepads() []*glfw.GamepadState {
-	gamepads := make([]*glfw.GamepadState, 0, 4)
-	for joyID := glfw.Joystick1; joyID <= glfw.JoystickLast; joyID++ {
-		if !joyID.Present() || !joyID.IsGamepad() {
-			continue
+// HandleEvent feeds SDL-originated input events into the input context
+func (im *InputManager) HandleEvent(event notasdl.Event) {
+	switch event.Type {
+
+	case notasdl.EventKeyDown:
+		if input, ok := sdlKeyMap[event.Key]; ok {
+			im.ctx.RecordKeyDown(input)
 		}
-		state := joyID.GetGamepadState()
-		if state == nil {
-			continue
+
+	case notasdl.EventKeyUp:
+		if input, ok := sdlKeyMap[event.Key]; ok {
+			im.ctx.RecordKeyUp(input)
 		}
-		gamepads = append(gamepads, state)
-	}
-	return gamepads
-}
 
-//func (im *InputManager) captureInputs(windows []*Window) {
-//	im.mu.Lock()
-//	defer im.mu.Unlock()
-//
-//	gamepads := connectedGamepads()
-//
-//	for input := range im.inputToSignal {
-//		im.active[input] = false // Reset
-//
-//		for _, win := range windows {
-//			if win == nil || win.ShouldClose() {
-//				continue
-//			}
-//			if isInputActive(win, input, gamepads) {
-//				im.active[input] = true
-//				break
-//			}
-//		}
-//	}
-//}
+	case notasdl.EventMouseDown:
+		if input, ok := sdlMouseButtonMap[event.MouseBtn]; ok {
+			im.ctx.RecordKeyDown(input)
+		}
 
-// BindInput binds a hardware input to a signal, when a hardware button activates the signal updates its values accordingly
-// a single hardware input can be bound to multiple different signals
-func (im *InputManager) BindInput(input Input, sig *InputSignal) {
-	if im.inputToSignal == nil {
-		im.inputToSignal = make(map[Input][]*InputSignal)
-	}
-	im.inputToSignal[input] = append(im.inputToSignal[input], sig)
-	if im.active == nil {
-		im.active = make(map[Input]bool)
-	}
-}
+	case notasdl.EventMouseUp:
+		if input, ok := sdlMouseButtonMap[event.MouseBtn]; ok {
+			im.ctx.RecordKeyUp(input)
+		}
 
-// BindAction binds an input signal to an action, when a signal reaches a specific state provided by the action, it activates
-// a single input signal can be bound to multiple actions
-func (im *InputManager) BindAction(sig *InputSignal, action *Action) {
-	im.mu.Lock()
-	defer im.mu.Unlock()
+	case notasdl.EventGamepadButtonDown:
+		if input, ok := sdlGamepadButtonMap[event.GamepadBtn]; ok {
+			im.ctx.RecordKeyDown(input)
+		}
 
-	if im.signalToAction == nil {
-		im.signalToAction = make(map[*InputSignal][]*Action)
-	}
-
-	action.bindSignal(sig)
-	im.signalToAction[sig] = append(im.signalToAction[sig], action)
-}
-
-func (im *InputManager) tick() {
-	im.updateSignals()
-
-	im.mu.RLock()
-	defer im.mu.RUnlock()
-
-	for _, actions := range im.signalToAction {
-		for _, action := range actions {
-			action.RunWhenShould(im.loop)
+	case notasdl.EventGamepadButtonUp:
+		if input, ok := sdlGamepadButtonMap[event.GamepadBtn]; ok {
+			im.ctx.RecordKeyUp(input)
 		}
 	}
 }

@@ -16,7 +16,7 @@ The result is a **minimal, predictable, and composable execution model**.
 * Parallel execution using worker pools
 * Signal-based input system
 * Simple action binding
-* GLFW window management
+* SDL window management
 * OpenGL rendering backend
 * Dynamic runtime task scheduling
 * Multiple window support
@@ -169,7 +169,7 @@ This system works with keyboard, mouse, and gamepads.
 
 # Window and Rendering System
 
-Notabor Engine uses **GLFW** for window management and **OpenGL** for rendering.
+Notabor Engine uses **SDL** for window management and input events, with **OpenGL** for rendering.
 
 Each window contains:
 

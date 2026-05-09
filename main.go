@@ -4,8 +4,10 @@ import (
 	"NotaborEngine/notacolor"
 	"NotaborEngine/notacore"
 	"NotaborEngine/notaentity"
+	"NotaborEngine/notamath"
 	"NotaborEngine/notasdl"
 	"NotaborEngine/notatask"
+	"fmt"
 	"log"
 	"time"
 )
@@ -31,7 +33,7 @@ func main() {
 		Y:         50,
 		W:         800,
 		H:         600,
-		Title:     "Entity Test",
+		Title:     "Entity Test - Debug Input",
 		Type:      notasdl.Windowed,
 		Resizable: true,
 		TargetFPS: 60,
@@ -63,7 +65,54 @@ func main() {
 		WithCollision(notaentity.CircleCollision(circleRadius)).
 		WithColor(notacolor.White)
 
+	moveStep := float32(0.05)
+	inputCtx := engine.Input.GetContext()
+
+	moveLeft := notacore.Input("moveLeft", notacore.KeyA, inputCtx)
+	moveRight := notacore.Input("moveRight", notacore.KeyD, inputCtx)
+	moveUp := notacore.Input("moveUp", notacore.KeyW, inputCtx)
+	moveDown := notacore.Input("moveDown", notacore.KeyS, inputCtx)
+
+	combo := notacore.InputCombo("combo", inputCtx, notacore.KeyE, notacore.KeyQ)
+
+	leftClickSignal := notacore.Input("leftClick", notacore.MouseLeft, inputCtx)
+
+	frameCount := 0
+
 	drawingLoop.Do(func() {
+		engine.Input.BeginFrame()
+		frameCount++
+
+		var moveX, moveY float32
+
+		if moveLeft.Held() {
+			moveX -= 1
+		}
+		if moveRight.Held() {
+			moveX += 1
+		}
+		if moveUp.Held() {
+			moveY += 1
+		}
+		if moveDown.Held() {
+			moveY -= 1
+		}
+
+		if moveX != 0 || moveY != 0 {
+			movement := notamath.Vec2{X: moveX, Y: moveY}.Mul(moveStep)
+			entity.Move(movement)
+		}
+
+		// Standard signals for comparison
+		if leftClickSignal.Pressed() {
+			fmt.Println("left click")
+		}
+
+		if combo.Pressed() {
+			fmt.Println("combo pressed")
+		}
+
+		em.Flush()
 		alpha := drawingLoop.Alpha(time.Now())
 		err := win.Draw(alpha, nil, entity)
 		if err != nil {
@@ -74,6 +123,4 @@ func main() {
 	if err := engine.Run(); err != nil {
 		log.Fatal(err)
 	}
-
-	_ = win
 }

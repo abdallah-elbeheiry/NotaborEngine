@@ -4,7 +4,6 @@ import (
 	"NotaborEngine/notaentity"
 	"NotaborEngine/notasdl"
 	"NotaborEngine/notasound"
-	"NotaborEngine/notatask"
 	"runtime"
 	"time"
 )
@@ -18,22 +17,18 @@ type Settings struct {
 type Engine struct {
 	Windows       []*notasdl.Window
 	Platform      notasdl.Platform
-	InputManager  *InputManager
+	Input         *InputManager
+	inputManager  *InputManager
 	SoundManager  *notasound.SoundManager
 	EntityManager *notaentity.EntityManager
 
-	settings  *Settings
-	inputLoop *notatask.Loop
-	running   bool
+	settings *Settings
+	running  bool
 }
 
 // Run activates all loops within all windows, it's recommended to use at the end of the engine configuration
 func (e *Engine) Run() error {
 	e.running = true
-
-	if e.inputLoop != nil {
-		e.inputLoop.Start()
-	}
 
 	// Start all logic loops
 	for _, w := range e.Windows {
@@ -47,8 +42,8 @@ func (e *Engine) Run() error {
 	for e.running && !e.AllWindowsClosed() {
 		e.Platform.PollEvents()
 
-		//if e.InputManager != nil {
-		//	e.InputManager.captureInputs(e.Windows)
+		//if e.inputManager != nil {
+		//	e.inputManager.captureInputs(e.Windows)
 		//}
 
 		now := time.Now()
@@ -79,19 +74,6 @@ func (e *Engine) Run() error {
 	return nil
 }
 
-// SetInputFrequency sets the frequency of the input loop, which is responsible for hardware input detection
-func (e *Engine) SetInputFrequency(Hz float32) {
-	e.inputLoop = notatask.CreateLoop(Hz)
-	e.InputManager.loop = e.inputLoop
-
-	e.inputLoop.Do(func() {
-		if e.InputManager == nil {
-			panic("InputManager is not initialized, initialize it first")
-		}
-		e.InputManager.tick()
-	})
-}
-
 // AllWindowsClosed returns true if all windows are closed
 func (e *Engine) AllWindowsClosed() bool {
 	for _, w := range e.Windows {
@@ -119,7 +101,9 @@ func (e *Engine) initPlatform() error {
 
 	e.Platform = p
 
-	e.InputManager = &InputManager{}
+	e.inputManager = NewInputManager()
+	e.Input = e.inputManager
+	e.Platform.SubscribeEvents(e.inputManager.HandleEvent)
 	e.EntityManager = notaentity.NewEntityManager()
 
 	return nil

@@ -2,16 +2,14 @@ module NotaborEngine
 
 go 1.25.0
 
-require github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728
-
 require (
+	github.com/Zyko0/go-sdl3 v0.1.1
 	github.com/ebitengine/oto/v3 v3.4.0
 	github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
 )
 
 require (
-	github.com/Zyko0/go-sdl3 v0.1.1 // indirect
 	github.com/Zyko0/purego-gen v0.0.0-20250727121216-3bcd331a1e0c // indirect
 	github.com/chewxy/math32 v1.11.1 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
