@@ -72,12 +72,13 @@ func main() {
 	moveRight := notacore.Input("moveRight", notacore.KeyD, inputCtx)
 	moveUp := notacore.Input("moveUp", notacore.KeyW, inputCtx)
 	moveDown := notacore.Input("moveDown", notacore.KeyS, inputCtx)
-
+	winLeft := notacore.Input("winLeft", notacore.KeyQ, inputCtx)
+	winRight := notacore.Input("winRight", notacore.KeyE, inputCtx)
 	combo := notacore.InputCombo("combo", inputCtx, notacore.KeyE, notacore.KeyQ)
 
 	leftClickSignal := notacore.Input("leftClick", notacore.MouseLeft, inputCtx)
 
-	engine.Input.Start(60)
+	engine.Input.Start(2400)
 
 	drawingLoop.Do(func() {
 		var moveX, moveY float32
@@ -94,16 +95,22 @@ func main() {
 		if moveDown.Held() {
 			moveY -= 1
 		}
-		if moveX != 0 || moveY != 0 {
 
+		if moveX != 0 || moveY != 0 {
 			movement := notamath.Vec2{X: moveX, Y: moveY}.Mul(moveStep)
 			entity.Move(movement)
+		}
+
+		if winLeft.Held() {
+			win.Move(-8, 0) // Move window left
+		}
+		if winRight.Held() {
+			win.Move(8, 0) // Move window right
 		}
 
 		if leftClickSignal.Pressed() {
 			fmt.Println("left click")
 		}
-
 		if combo.Pressed() {
 			fmt.Println("combo pressed")
 		}

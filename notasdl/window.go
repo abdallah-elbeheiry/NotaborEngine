@@ -108,3 +108,67 @@ func (w *Window) Draw(alpha float32, cam *Camera2D, entities ...*notaentity.Enti
 
 	return nil
 }
+
+func (w *Window) SetPosition(x, y int) {
+	if w.Handle == nil {
+		return
+	}
+
+	bounds := w.getCurrentDisplayBounds()
+
+	minX := -w.Config.W + 50
+	minY := -w.Config.H + 50
+	maxX := int(bounds.W - 50)
+	maxY := int(bounds.H - 50)
+
+	if x < minX {
+		x = minX
+	}
+	if x > maxX {
+		x = maxX
+	}
+	if y < minY {
+		y = minY
+	}
+	if y > maxY {
+		y = maxY
+	}
+
+	_ = w.Handle.SetPosition(int32(x), int32(y))
+
+	w.Config.X = x
+	w.Config.Y = y
+}
+
+// Move moves the window by delta with boundary checking
+func (w *Window) Move(dx, dy int) {
+	if w.Handle == nil {
+		return
+	}
+	x, y := w.GetPosition()
+	w.SetPosition(x+dx, y+dy)
+}
+
+// Helper to get current display bounds
+
+func (w *Window) getCurrentDisplayBounds() *sdl.Rect {
+	if w.Handle == nil {
+		panic("Window handle is nil, initialize window before calling getCurrentDisplayBounds")
+	}
+
+	bounds, err := sdl.GetDisplayForWindow(w.Handle).Bounds()
+	if err != nil {
+		panic(err)
+	}
+
+	return bounds
+}
+
+// GetPosition returns current window position
+func (w *Window) GetPosition() (x, y int) {
+	if w.Handle != nil {
+		px, py, _ := w.Handle.Position()
+		return int(px), int(py)
+	}
+	return w.Config.X, w.Config.Y
+}
