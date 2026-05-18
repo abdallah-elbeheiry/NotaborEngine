@@ -2,6 +2,8 @@ package notacore
 
 import (
 	"NotaborEngine/notasdl"
+	"NotaborEngine/notatask"
+	"NotaborEngine/notatomic"
 	"sync"
 
 	"github.com/Zyko0/go-sdl3/sdl"
@@ -344,68 +346,87 @@ var sdlGamepadAxisMap = map[notasdl.GamepadAxis]StateInput{
 }
 
 type InputManager struct {
-	ctx     *InputContext
-	signals map[string]*InputSignal
-	mu      sync.RWMutex
+	ctx         *InputContext
+	signals     sync.Map     // string -> *InputSignal
+	signalsInit sync.RWMutex // Only used during initial registration
+
+	Loop     *notatask.Loop
+	platform notasdl.Platform
+	running  notatomic.Bool
 }
 
-// NewInputManager creates a new input manager
-func NewInputManager() *InputManager {
+// newInputManager creates a new input manager
+func newInputManager() *InputManager {
 	return &InputManager{
-		ctx:     NewInputContext(),
-		signals: make(map[string]*InputSignal),
+		ctx: NewInputContext(),
 	}
 }
 
-// GetContext returns the input context for direct access if needed
+func (im *InputManager) inputTick() {
+	if !im.running.Get() {
+		return
+	}
+
+	im.platform.PollEvents()
+	im.ctx.beginFrame()
+}
+
+func (im *InputManager) Start(Hz float32) {
+	im.running.Set(true)
+	im.Loop = notatask.CreateLoop(Hz)
+	im.Loop.Do(im.inputTick)
+}
+
+func (im *InputManager) Stop() {
+	im.running.Set(false)
+	if im.Loop != nil {
+		im.Loop.Stop()
+	}
+}
+
 func (im *InputManager) GetContext() *InputContext {
 	return im.ctx
 }
 
-// Get retrieves a previously bound signal by name
+// Get retrieves a previously bound signal by name (lock-free)
 func (im *InputManager) Get(name string) *InputSignal {
-	im.mu.RLock()
-	defer im.mu.RUnlock()
-	return im.signals[name]
+	if sig, ok := im.signals.Load(name); ok {
+		return sig.(*InputSignal)
+	}
+	return nil
 }
 
-// BeginFrame should be called at the start of each frame to update input states
-func (im *InputManager) BeginFrame() {
-	im.ctx.BeginFrame()
-}
-
-// HandleEvent feeds SDL-originated input events into the input context
+// HandleEvent feeds SDL-originated input events (called from potentially different thread)
 func (im *InputManager) HandleEvent(event notasdl.Event) {
 	switch event.Type {
-
 	case notasdl.EventKeyDown:
 		if input, ok := sdlKeyMap[event.Key]; ok {
-			im.ctx.RecordKeyDown(input)
+			im.ctx.recordKeyDown(input)
 		}
 
 	case notasdl.EventKeyUp:
 		if input, ok := sdlKeyMap[event.Key]; ok {
-			im.ctx.RecordKeyUp(input)
+			im.ctx.recordKeyUp(input)
 		}
 
 	case notasdl.EventMouseDown:
 		if input, ok := sdlMouseButtonMap[event.MouseBtn]; ok {
-			im.ctx.RecordKeyDown(input)
+			im.ctx.recordKeyDown(input)
 		}
 
 	case notasdl.EventMouseUp:
 		if input, ok := sdlMouseButtonMap[event.MouseBtn]; ok {
-			im.ctx.RecordKeyUp(input)
+			im.ctx.recordKeyUp(input)
 		}
 
 	case notasdl.EventGamepadButtonDown:
 		if input, ok := sdlGamepadButtonMap[event.GamepadBtn]; ok {
-			im.ctx.RecordKeyDown(input)
+			im.ctx.recordKeyDown(input)
 		}
 
 	case notasdl.EventGamepadButtonUp:
 		if input, ok := sdlGamepadButtonMap[event.GamepadBtn]; ok {
-			im.ctx.RecordKeyUp(input)
+			im.ctx.recordKeyUp(input)
 		}
 	}
 }

@@ -1,92 +1,142 @@
 package notacore
 
+import (
+	"NotaborEngine/notatomic"
+)
+
 type InputContext struct {
-	// Hardware state tracking
-	PrevHardware map[StateInput]bool // Hardware state from last frame
-	CurrHardware map[StateInput]bool // Current hardware state (is key physically pressed)
+	// Current hardware state (what is physically pressed right now)
+	currHardware *notatomic.Pointer[map[StateInput]bool]
 
-	// Event tracking for this frame
-	KeyDownEvents map[StateInput]bool // Keys that had KeyDown events this frame
-	KeyUpEvents   map[StateInput]bool // Keys that had KeyUp events this frame
+	// Snapshot taken at the beginning of the frame (safe for readers)
+	snapshot *notatomic.Pointer[inputSnapshot]
+}
 
-	// Saved events from current frame before clearing
-	frameKeyDownEvents map[StateInput]bool
-	frameKeyUpEvents   map[StateInput]bool
+// inputSnapshot holds a consistent view of input state for one frame
+type inputSnapshot struct {
+	PrevHardware map[StateInput]bool
+	CurrHardware map[StateInput]bool
+
+	KeyDownEvents map[StateInput]bool
+	KeyUpEvents   map[StateInput]bool
 }
 
 func NewInputContext() *InputContext {
-	return &InputContext{
-		PrevHardware:       make(map[StateInput]bool),
-		CurrHardware:       make(map[StateInput]bool),
-		KeyDownEvents:      make(map[StateInput]bool),
-		KeyUpEvents:        make(map[StateInput]bool),
-		frameKeyDownEvents: make(map[StateInput]bool),
-		frameKeyUpEvents:   make(map[StateInput]bool),
+	emptyMap := make(map[StateInput]bool)
+
+	ctx := &InputContext{
+		currHardware: notatomic.NewPointer(&emptyMap),
+		snapshot:     notatomic.NewPointer(&inputSnapshot{}),
 	}
+
+	// Initialize snapshot
+	initialSnap := &inputSnapshot{
+		PrevHardware:  make(map[StateInput]bool),
+		CurrHardware:  make(map[StateInput]bool),
+		KeyDownEvents: make(map[StateInput]bool),
+		KeyUpEvents:   make(map[StateInput]bool),
+	}
+	ctx.snapshot.Set(initialSnap)
+
+	return ctx
 }
 
-// BeginFrame should be called at the start of each frame to update state
-func (c *InputContext) BeginFrame() {
-	// Save THIS frame's events before clearing for evaluation
-	c.frameKeyDownEvents = make(map[StateInput]bool)
-	c.frameKeyUpEvents = make(map[StateInput]bool)
-	for k, v := range c.KeyDownEvents {
-		c.frameKeyDownEvents[k] = v
-	}
-	for k, v := range c.KeyUpEvents {
-		c.frameKeyUpEvents[k] = v
+// beginFrame should be called at the start of each frame to update state
+// This is the only place that does significant work and should be called from the input loop.
+func (c *InputContext) beginFrame() {
+	oldSnap := c.snapshot.Get()
+
+	newSnap := &inputSnapshot{
+		PrevHardware:  make(map[StateInput]bool),
+		CurrHardware:  make(map[StateInput]bool),
+		KeyDownEvents: make(map[StateInput]bool),
+		KeyUpEvents:   make(map[StateInput]bool),
 	}
 
-	// Shift hardware state to previous (for state-based fallback)
-	for k, v := range c.CurrHardware {
-		c.PrevHardware[k] = v
+	curr := *c.currHardware.Get()
+	for k, v := range curr {
+		newSnap.PrevHardware[k] = v
+		newSnap.CurrHardware[k] = v
 	}
-	// Clear event flags for NEXT frame
-	c.KeyDownEvents = make(map[StateInput]bool)
-	c.KeyUpEvents = make(map[StateInput]bool)
+
+	if oldSnap != nil {
+		for k := range oldSnap.KeyDownEvents {
+			newSnap.KeyDownEvents[k] = true
+		}
+		for k := range oldSnap.KeyUpEvents {
+			newSnap.KeyUpEvents[k] = true
+		}
+	}
+
+	c.snapshot.Set(newSnap)
+}
+
+// recordKeyDown is called when a hardware key down event occurs
+func (c *InputContext) recordKeyDown(input StateInput) {
+	m := *c.currHardware.Get()
+	m[input] = true
+}
+
+// recordKeyUp is called when a hardware key up event occurs
+func (c *InputContext) recordKeyUp(input StateInput) {
+	m := *c.currHardware.Get()
+	m[input] = false
+}
+
+// isKeyHeldThisFrame returns true if the key is physically pressed this frame
+func (c *InputContext) isKeyHeldThisFrame(input StateInput) bool {
+	snap := c.snapshot.Get()
+	if snap == nil {
+		return false
+	}
+	return snap.CurrHardware[input]
+}
+
+// wasKeyHeldLastFrame returns true if the key was physically pressed last frame
+func (c *InputContext) wasKeyHeldLastFrame(input StateInput) bool {
+	snap := c.snapshot.Get()
+	if snap == nil {
+		return false
+	}
+	return snap.PrevHardware[input]
+}
+
+// isKeyDownThisFrame returns true if a KeyDown event occurred for this input this frame
+func (c *InputContext) isKeyDownThisFrame(input StateInput) bool {
+	snap := c.snapshot.Get()
+	if snap == nil {
+		return false
+	}
+	return snap.KeyDownEvents[input]
+}
+
+// isKeyUpThisFrame returns true if a KeyUp event occurred for this input this frame
+func (c *InputContext) isKeyUpThisFrame(input StateInput) bool {
+	snap := c.snapshot.Get()
+	if snap == nil {
+		return false
+	}
+	return snap.KeyUpEvents[input]
 }
 
 // GetState returns the current input state for debugging/inspection
 func (c *InputContext) GetState(input StateInput) InputState {
-	curr := c.CurrHardware[input]
-	prev := c.PrevHardware[input]
+	snap := c.snapshot.Get()
+	if snap == nil {
+		return StateIdle
+	}
+
+	curr := snap.CurrHardware[input]
+	prev := snap.PrevHardware[input]
 
 	switch {
 	case curr && !prev:
 		return StatePressed
+	case curr && prev:
+		return StateHeld
+	case !curr && prev:
+		return StateReleased
 	default:
 		return StateIdle
 	}
-}
-
-// RecordKeyDown is called when a hardware key down event occurs
-func (c *InputContext) RecordKeyDown(input StateInput) {
-	c.CurrHardware[input] = true
-	c.KeyDownEvents[input] = true
-}
-
-// RecordKeyUp is called when a hardware key up event occurs
-func (c *InputContext) RecordKeyUp(input StateInput) {
-	c.CurrHardware[input] = false
-	c.KeyUpEvents[input] = true
-}
-
-// IsKeyDownThisFrame returns true if a KeyDown event occurred for this input this frame
-func (c *InputContext) IsKeyDownThisFrame(input StateInput) bool {
-	return c.frameKeyDownEvents[input]
-}
-
-// IsKeyUpThisFrame returns true if a KeyUp event occurred for this input this frame
-func (c *InputContext) IsKeyUpThisFrame(input StateInput) bool {
-	return c.frameKeyUpEvents[input]
-}
-
-// IsKeyHeldThisFrame returns true if the key is physically pressed this frame
-func (c *InputContext) IsKeyHeldThisFrame(input StateInput) bool {
-	return c.CurrHardware[input]
-}
-
-// WasKeyHeldLastFrame returns true if the key was physically pressed last frame
-func (c *InputContext) WasKeyHeldLastFrame(input StateInput) bool {
-	return c.PrevHardware[input]
 }

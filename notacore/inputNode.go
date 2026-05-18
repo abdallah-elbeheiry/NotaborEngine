@@ -72,17 +72,17 @@ func NewRawInputNode(name string, input StateInput) *RawInputNode {
 
 func (n *RawInputNode) Evaluate(ctx *InputContext) InputState {
 	// Use events directly for immediate feedback, fall back to state transitions
-	if ctx.IsKeyDownThisFrame(n.input) {
+	if ctx.isKeyDownThisFrame(n.input) {
 		return StatePressed
 	}
 
-	if ctx.IsKeyUpThisFrame(n.input) {
+	if ctx.isKeyUpThisFrame(n.input) {
 		return StateReleased
 	}
 
 	// For states between events, use hardware state tracking
-	isHeldNow := ctx.IsKeyHeldThisFrame(n.input)
-	wasHeldBefore := ctx.WasKeyHeldLastFrame(n.input)
+	isHeldNow := ctx.isKeyHeldThisFrame(n.input)
+	wasHeldBefore := ctx.wasKeyHeldLastFrame(n.input)
 
 	switch {
 	case isHeldNow && wasHeldBefore:

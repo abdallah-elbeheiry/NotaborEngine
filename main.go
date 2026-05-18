@@ -77,9 +77,9 @@ func main() {
 
 	leftClickSignal := notacore.Input("leftClick", notacore.MouseLeft, inputCtx)
 
-	drawingLoop.Do(func() {
-		engine.Input.BeginFrame()
+	engine.Input.Start(60)
 
+	drawingLoop.Do(func() {
 		var moveX, moveY float32
 
 		if moveLeft.Held() {
@@ -94,13 +94,12 @@ func main() {
 		if moveDown.Held() {
 			moveY -= 1
 		}
-
 		if moveX != 0 || moveY != 0 {
+
 			movement := notamath.Vec2{X: moveX, Y: moveY}.Mul(moveStep)
 			entity.Move(movement)
 		}
 
-		// Standard signals for comparison
 		if leftClickSignal.Pressed() {
 			fmt.Println("left click")
 		}

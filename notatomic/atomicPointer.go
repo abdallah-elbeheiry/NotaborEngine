@@ -31,3 +31,9 @@ func (p *Pointer[T]) CompareAndSwap(old, new *T) bool {
 func (p *Pointer[T]) IsNil() bool {
 	return p.v.Load() == nil
 }
+
+func NewPointer[T any](initial *T) *Pointer[T] {
+	p := &Pointer[T]{}
+	p.Set(initial)
+	return p
+}

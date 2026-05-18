@@ -30,6 +30,10 @@ type Engine struct {
 func (e *Engine) Run() error {
 	e.running = true
 
+	if e.inputManager.running.Get() {
+		e.inputManager.Loop.Start()
+	}
+
 	// Start all logic loops
 	for _, w := range e.Windows {
 		cfg := w.GetConfig()
@@ -41,11 +45,6 @@ func (e *Engine) Run() error {
 
 	for e.running && !e.AllWindowsClosed() {
 		e.Platform.PollEvents()
-
-		//if e.inputManager != nil {
-		//	e.inputManager.captureInputs(e.Windows)
-		//}
-
 		now := time.Now()
 
 		for _, win := range e.Windows {
@@ -65,6 +64,10 @@ func (e *Engine) Run() error {
 		}
 	}
 
+	if e.inputManager.running.Get() {
+		e.running = false
+		e.inputManager.Loop.Stop()
+	}
 	// Stop logic loops
 	for _, w := range e.Windows {
 		for _, loop := range w.GetConfig().Loops {
@@ -101,7 +104,8 @@ func (e *Engine) initPlatform() error {
 
 	e.Platform = p
 
-	e.inputManager = NewInputManager()
+	e.inputManager = newInputManager()
+	e.inputManager.platform = e.Platform
 	e.Input = e.inputManager
 	e.Platform.SubscribeEvents(e.inputManager.HandleEvent)
 	e.EntityManager = notaentity.NewEntityManager()
