@@ -1,33 +1,48 @@
 package notashader
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"sync"
 
 	"github.com/Zyko0/go-sdl3/sdl"
+	"github.com/Zyko0/go-sdl3/shadercross"
 )
 
-type ShaderStage uint32
+/*
+	BIND GROUP MODEL:
+
+	Group 0:
+		Binding 0 -> MaterialUniforms (uniform buffer)
+
+	Group 1:
+		Binding 0 -> Texture (future extension)
+*/
 
 const (
-	ShaderStageVertex   ShaderStage = ShaderStage(sdl.GPU_SHADERSTAGE_VERTEX)
-	ShaderStageFragment ShaderStage = ShaderStage(sdl.GPU_SHADERSTAGE_FRAGMENT)
-
-	// Uniform constants
-	UseTexture   = "uUseTexture"
-	TextureBind  = "uTextureBind"
-	UseCircle    = "uUseCircle"
-	CircleRadius = "uCircleRadius"
-	CircleEdge   = "uCircleEdge"
-
-	// Default shader paths
-	DefaultVertexShaderPath   = "notashader/shaders/basic.vert"
-	DefaultFragmentShaderPath = "notashader/shaders/basic.frag"
+	DefaultVertexShaderPath   = "resources/shaders/basic_shader.vert.hlsl"
+	DefaultFragmentShaderPath = "resources/shaders/basic_shader.frag.hlsl"
 )
 
+const (
+	MaterialBindGroup = 0
+	MaterialBinding   = 0
+)
+
+type MaterialUniforms struct {
+	UseTexture   uint32
+	UseCircle    uint32
+	CircleRadius float32
+	CircleEdge   float32
+}
+
+// ================= SHADER =================
+
 type Shader struct {
-	Device         *sdl.GPUDevice
+	Device *sdl.GPUDevice
+
 	VertexShader   *sdl.GPUShader
 	FragmentShader *sdl.GPUShader
 	Pipeline       *sdl.GPUGraphicsPipeline
@@ -35,194 +50,237 @@ type Shader struct {
 	VertexPath   string
 	FragmentPath string
 
-	mu       sync.RWMutex
-	Uniforms map[string]interface{}
+	ColorTargetFormat sdl.GPUTextureFormat
+
+	mu sync.RWMutex
 }
 
-// NewShader creates a shader from pre-compiled SPIR-V files
-func NewShader(vertexPath, fragmentPath string) (*Shader, error) {
-	sh := &Shader{
-		VertexPath:   vertexPath,
-		FragmentPath: fragmentPath,
-		Uniforms:     make(map[string]interface{}),
+func NewShader(device *sdl.GPUDevice, vertexPath, fragmentPath string, format sdl.GPUTextureFormat) (*Shader, error) {
+	s := &Shader{
+		Device:            device,
+		VertexPath:        vertexPath,
+		FragmentPath:      fragmentPath,
+		ColorTargetFormat: format,
 	}
-
-	if err := sh.Reload(); err != nil {
-		return nil, err
-	}
-	return sh, nil
+	return s, s.Reload()
 }
 
-// Reload loads SPIR-V shaders and creates pipeline
 func (s *Shader) Reload() error {
-	vertData, err := os.ReadFile(s.VertexPath)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	vertSrc, err := os.ReadFile(s.VertexPath)
 	if err != nil {
-		return fmt.Errorf("failed to read vertex shader %s: %w", s.VertexPath, err)
+		return err
+	}
+	fragSrc, err := os.ReadFile(s.FragmentPath)
+	if err != nil {
+		return err
 	}
 
-	fragData, err := os.ReadFile(s.FragmentPath)
+	vertSpv, err := shadercross.CompileSPIRVFromHLSL(&shadercross.HLSLInfo{
+		Source:      string(vertSrc),
+		Entrypoint:  "main",
+		ShaderStage: shadercross.SHADERSTAGE_VERTEX,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to read fragment shader %s: %w", s.FragmentPath, err)
+		return fmt.Errorf("vertex compile failed: %w", err)
 	}
 
-	// Create shaders
+	fragSpv, err := shadercross.CompileSPIRVFromHLSL(&shadercross.HLSLInfo{
+		Source:      string(fragSrc),
+		Entrypoint:  "main",
+		ShaderStage: shadercross.SHADERSTAGE_FRAGMENT,
+	})
+	if err != nil {
+		return fmt.Errorf("fragment compile failed: %w", err)
+	}
+
 	vertShader, err := s.Device.CreateGPUShader(&sdl.GPUShaderCreateInfo{
-		Code:       vertData,
-		Stage:      sdl.GPU_SHADERSTAGE_VERTEX,
+		Code:       vertSpv,
 		Format:     sdl.GPU_SHADERFORMAT_SPIRV,
+		Stage:      sdl.GPU_SHADERSTAGE_VERTEX,
 		Entrypoint: "main",
 	})
 	if err != nil {
-		s.Device.ReleaseShader(vertShader)
-		return fmt.Errorf("failed to create vertex shader: %v", err)
+		return err
 	}
 
 	fragShader, err := s.Device.CreateGPUShader(&sdl.GPUShaderCreateInfo{
-		Code:       fragData,
-		Stage:      sdl.GPU_SHADERSTAGE_FRAGMENT,
+		Code:       fragSpv,
 		Format:     sdl.GPU_SHADERFORMAT_SPIRV,
+		Stage:      sdl.GPU_SHADERSTAGE_FRAGMENT,
 		Entrypoint: "main",
 	})
 	if err != nil {
 		s.Device.ReleaseShader(vertShader)
-		return fmt.Errorf("failed to create fragment shader: %v", err)
+		return err
 	}
 
-	// Cleanup old resources
-	s.Delete()
+	pipeline, err := s.Device.CreateGraphicsPipeline(&sdl.GPUGraphicsPipelineCreateInfo{
+		VertexShader:   vertShader,
+		FragmentShader: fragShader,
+
+		VertexInputState: sdl.GPUVertexInputState{
+			VertexAttributes: []sdl.GPUVertexAttribute{
+				{Location: 0, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT2, Offset: 0},
+				{Location: 1, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT4, Offset: 8},
+				{Location: 2, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT2, Offset: 24},
+				{Location: 3, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT2, Offset: 32},
+			},
+			VertexBufferDescriptions: []sdl.GPUVertexBufferDescription{
+				{Slot: 0, Pitch: 40, InputRate: sdl.GPU_VERTEXINPUTRATE_VERTEX},
+			},
+		},
+
+		PrimitiveType: sdl.GPU_PRIMITIVETYPE_TRIANGLELIST,
+
+		RasterizerState: sdl.GPURasterizerState{
+			FillMode:  sdl.GPU_FILLMODE_FILL,
+			CullMode:  sdl.GPU_CULLMODE_NONE,
+			FrontFace: sdl.GPU_FRONTFACE_COUNTER_CLOCKWISE,
+		},
+
+		MultisampleState: sdl.GPUMultisampleState{
+			SampleCount: sdl.GPU_SAMPLECOUNT_1,
+		},
+
+		TargetInfo: sdl.GPUGraphicsPipelineTargetInfo{
+			ColorTargetDescriptions: []sdl.GPUColorTargetDescription{
+				{Format: s.ColorTargetFormat},
+			},
+		},
+	})
+
+	if err != nil {
+		s.Device.ReleaseShader(vertShader)
+		s.Device.ReleaseShader(fragShader)
+		return fmt.Errorf("pipeline failed: %w", err)
+	}
 
 	s.VertexShader = vertShader
 	s.FragmentShader = fragShader
-
-	s.mu.Lock()
-	s.Uniforms = make(map[string]interface{})
-	s.mu.Unlock()
+	s.Pipeline = pipeline
 
 	return nil
 }
 
-// BindVulkan binds the pipeline to the current render pass
-func (s *Shader) BindVulkan(renderPass *sdl.GPURenderPass) {
-	if s.Pipeline != nil && renderPass != nil {
-		renderPass.BindGraphicsPipeline(s.Pipeline)
+func (s *Shader) Bind(rp *sdl.GPURenderPass) {
+	if s == nil || s.Pipeline == nil {
+		return
 	}
+	rp.BindGraphicsPipeline(s.Pipeline)
 }
 
-// SetUniform stores uniform value (for later push constants / descriptor sets)
-func (s *Shader) SetUniform(name string, value interface{}) {
-	s.mu.Lock()
-	s.Uniforms[name] = value
-	s.mu.Unlock()
+type Material struct {
+	Shader *Shader
+
+	UseTexture bool
+	UseCircle  bool
+
+	CircleRadius float32
+	CircleEdge   float32
+
+	mu sync.RWMutex
 }
 
-// Bind is an alias for BindVulkan for compatibility
-func (s *Shader) Bind() {
-	// Placeholder for OpenGL-style binding if needed
+func NewMaterial(shader *Shader) *Material {
+	return &Material{Shader: shader}
 }
 
-// SetUniformVulkan sets uniforms for Vulkan
-func (s *Shader) SetUniformVulkan(name string, value interface{}) {
-	s.SetUniform(name, value)
+func (m *Material) BuildUniformBuffer() []byte {
+	u := MaterialUniforms{
+		UseTexture:   boolToUint(m.UseTexture),
+		UseCircle:    boolToUint(m.UseCircle),
+		CircleRadius: m.CircleRadius,
+		CircleEdge:   m.CircleEdge,
+	}
+
+	data := make([]byte, 16)
+
+	binary.LittleEndian.PutUint32(data[0:], u.UseTexture)
+	binary.LittleEndian.PutUint32(data[4:], u.UseCircle)
+	binary.LittleEndian.PutUint32(data[8:], math.Float32bits(u.CircleRadius))
+	binary.LittleEndian.PutUint32(data[12:], math.Float32bits(u.CircleEdge))
+
+	return data
+}
+
+func (m *Material) Apply(cmd *sdl.GPUCommandBuffer) {
+	if m == nil || m.Shader == nil {
+		return
+	}
+
+	cmd.PushFragmentUniformData(MaterialBindGroup, m.BuildUniformBuffer())
+}
+
+func boolToUint(v bool) uint32 {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (s *Shader) Delete() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.VertexShader != nil {
 		s.Device.ReleaseShader(s.VertexShader)
 		s.VertexShader = nil
 	}
+
 	if s.FragmentShader != nil {
 		s.Device.ReleaseShader(s.FragmentShader)
 		s.FragmentShader = nil
 	}
+
 	if s.Pipeline != nil {
 		s.Device.ReleaseGraphicsPipeline(s.Pipeline)
 		s.Pipeline = nil
 	}
 }
 
-type Material struct {
-	Shader *Shader
-
-	mu       sync.RWMutex
-	uniforms map[string]interface{}
-}
-
-func NewMaterial(shader *Shader) *Material {
-	return &Material{
-		Shader:   shader,
-		uniforms: make(map[string]interface{}),
+func (m *Material) CircleMask(radius, edge float32) *Material {
+	if m == nil {
+		return nil
 	}
-}
 
-// Clone creates a shallow copy of the material that shares the shader but owns an independent uniform set.
-func (m *Material) Clone() *Material {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	clone := &Material{
-		Shader:   m.Shader,
-		uniforms: make(map[string]interface{}, len(m.uniforms)),
-	}
-	for key, value := range m.uniforms {
-		clone.uniforms[key] = value
-	}
-	return clone
-}
-
-func (m *Material) Set(name string, value interface{}) *Material {
 	m.mu.Lock()
-	m.uniforms[name] = value
-	m.mu.Unlock()
+	defer m.mu.Unlock()
+
+	m.UseCircle = true
+	m.CircleRadius = radius
+	m.CircleEdge = edge
+
 	return m
 }
 
-// Bool Convenience methods
-func (m *Material) Bool(name string, value bool) *Material     { return m.Set(name, value) }
-func (m *Material) Int(name string, value int32) *Material     { return m.Set(name, value) }
-func (m *Material) Float(name string, value float32) *Material { return m.Set(name, value) }
-
-func (m *Material) CircleMask(radius, edge float32) *Material {
-	return m.Bool(UseCircle, true).
-		Float(CircleRadius, radius).
-		Float(CircleEdge, edge)
-}
-
-// NoCircleMask disables the built-in circular mask on the material.
 func (m *Material) NoCircleMask() *Material {
-	return m.Bool(UseCircle, false)
+	if m == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.UseCircle = false
+	return m
 }
 
-// ApplyVulkan applies material uniforms to a shader for Vulkan rendering
-func (m *Material) ApplyVulkan(textureEnabled bool, renderPass *sdl.GPURenderPass, shader *Shader) {
-	if m == nil || m.Shader == nil {
-		return
+func (m *Material) Clone() *Material {
+	if m == nil {
+		return nil
 	}
-
-	if shader != nil {
-		shader.BindVulkan(renderPass)
-		shader.SetUniform(UseTexture, textureEnabled)
-		m.mu.RLock()
-		defer m.mu.RUnlock()
-		for name, value := range m.uniforms {
-			shader.SetUniform(name, value)
-		}
-	}
-}
-
-// Apply applies material uniforms in a backend-agnostic way
-func (m *Material) Apply(textureEnabled bool) {
-	if m == nil || m.Shader == nil {
-		return
-	}
-
-	m.Shader.Bind()
-	m.Shader.SetUniform(UseTexture, textureEnabled)
-	m.Shader.SetUniform(TextureBind, int32(0))
-	m.Shader.SetUniform(UseCircle, false)
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	for name, value := range m.uniforms {
-		m.Shader.SetUniform(name, value)
+
+	return &Material{
+		Shader:       m.Shader,
+		UseTexture:   m.UseTexture,
+		UseCircle:    m.UseCircle,
+		CircleRadius: m.CircleRadius,
+		CircleEdge:   m.CircleEdge,
 	}
 }

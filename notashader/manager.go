@@ -4,17 +4,26 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+
+	"github.com/Zyko0/go-sdl3/sdl"
 )
 
 type Manager struct {
-	mu      sync.RWMutex
+	mu sync.RWMutex
+
+	device *sdl.GPUDevice
+
+	colorTargetFormat sdl.GPUTextureFormat
+
 	shaders map[string]*Shader
 }
 
 // NewManager creates a shader manager that caches shaders by name.
-func NewManager() *Manager {
+func NewManager(device *sdl.GPUDevice, colorTargetFormat sdl.GPUTextureFormat) *Manager {
 	return &Manager{
-		shaders: make(map[string]*Shader),
+		device:            device,
+		colorTargetFormat: colorTargetFormat,
+		shaders:           make(map[string]*Shader),
 	}
 }
 
@@ -37,7 +46,7 @@ func (m *Manager) Load(name, vertexPath, fragmentPath string) (*Shader, error) {
 		return nil, fmt.Errorf("failed to resolve fragment shader path: %w", err)
 	}
 
-	shader, err := NewShader(vertAbs, fragAbs)
+	shader, err := NewShader(m.device, vertAbs, fragAbs, m.colorTargetFormat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load shader '%s': %w", name, err)
 	}

@@ -331,27 +331,26 @@ func (r *VulkanRenderer) Flush(backend *VulkanBackend, cmdBuf *sdl.GPUCommandBuf
 	for _, batch := range batches {
 		if batch.material != nil {
 			if batch.material != r.currentMaterial || batch.texture != r.currentTexture {
-				batch.material.ApplyVulkan(batch.texture != nil, renderPass, batch.shader)
+
+				batch.material.Apply(cmdBuf)
+
 				r.currentMaterial = batch.material
 				r.currentShader = batch.material.Shader
 			}
 		} else if batch.shader != r.currentShader {
-			batch.shader.BindVulkan(renderPass)
+
+			batch.shader.Bind(renderPass)
+
 			r.currentShader = batch.shader
 			r.currentMaterial = nil
 		}
 
 		if batch.texture != r.currentTexture {
+
 			if batch.texture != nil {
-				if batch.material == nil {
-					batch.shader.SetUniform(notashader.UseTexture, true)
-				}
 				batch.texture.Bind(renderPass)
-			} else {
-				if batch.material == nil {
-					batch.shader.SetUniform(notashader.UseTexture, false)
-				}
 			}
+
 			r.currentTexture = batch.texture
 		}
 

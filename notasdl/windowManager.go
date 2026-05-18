@@ -2,6 +2,7 @@ package notasdl
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"NotaborEngine/notarender"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Zyko0/go-sdl3/bin/binsdl"
 	"github.com/Zyko0/go-sdl3/sdl"
+	"github.com/Zyko0/go-sdl3/shadercross"
 )
 
 type WindowID uint32
@@ -26,6 +28,9 @@ func (wm *WindowManager) Init() error {
 
 	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_GAMEPAD); err != nil {
 		return err
+	}
+	if err := shadercross.LoadLibrary(shadercross.Path()); err != nil {
+		return fmt.Errorf("failed to load shadercross library: %w", err)
 	}
 
 	wm.windows = make(map[WindowID]*Window)
@@ -87,15 +92,26 @@ func (wm *WindowManager) CreateWindow(cfg *WindowConfig) (*Window, error) {
 		win.Destroy()
 		return nil, err
 	}
+	err = backend.Device.ClaimWindow(win)
+	if err != nil {
+		win.Destroy()
+		backend.Shutdown()
+		return nil, err
+	}
 
 	// Runtime creation step
+	swapchainFormat := backend.Device.SwapchainTextureFormat(win)
+
 	rt := WindowRuntime{
 		LastFrame:  time.Now(),
 		TargetDt:   time.Duration(float64(time.Second) / float64(cfg.TargetFPS)),
 		Backend:    backend,
 		Renderer:   &notarender.Renderer{},
 		TextureMgr: notatexture.NewTextureManager(),
-		ShaderMgr:  notashader.NewManager(),
+		ShaderMgr: notashader.NewManager(
+			backend.Device,
+			swapchainFormat,
+		),
 	}
 	rt.SpriteMgr = notatexture.NewSpriteManager(rt.TextureMgr)
 	rt.RenderLoop = notatask.CreateLoop(cfg.TargetFPS)
