@@ -45,14 +45,21 @@ func CircleSpriteOptions(radius float32) VisualOptions {
 }
 
 func (w *Window) LoadTexture(name, path string) (*notatexture.Texture, error) {
-	w.MakeCurrent()
-
+	// If we're using the SDL GPU backend, do not create an OpenGL texture here.
+	// The SDL GPU backend manages GPU textures itself. Only create an OpenGL texture
+	// when no GPU backend is present (legacy/OpenGL path).
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	return w.Runtime.TextureMgr.Load(name, absPath, true)
+	createGL := false
+	if w.Runtime == nil || w.Runtime.Backend == nil {
+		// No GPU backend -> assume legacy OpenGL path
+		createGL = true
+	}
+
+	return w.Runtime.TextureMgr.Load(name, absPath, createGL)
 }
 
 func (w *Window) GetTexture(name string) (*notatexture.Texture, error) {

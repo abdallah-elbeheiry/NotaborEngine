@@ -34,11 +34,9 @@ type WindowRuntime struct {
 	LastFrame time.Time
 	TargetDt  time.Duration
 
-	GLContext sdl.GLContext
-
 	RenderLoop *notatask.Loop
 
-	Backend    *notarender.GLBackend
+	Backend    *notarender.Backend
 	Renderer   *notarender.Renderer
 	TextureMgr *notatexture.TextureManager
 	SpriteMgr  *notatexture.SpriteManager
@@ -67,13 +65,22 @@ func (w *Window) RenderFrame() {
 	}
 
 	w.Runtime.Renderer.FrameID.Inc()
-	w.Runtime.Renderer.Flush(w.Runtime.Backend)
 
-	_ = sdl.GL_SwapWindow(w.Handle)
+	// Acquire command buffer for this frame
+	cmdBuf, err := w.Runtime.Backend.BeginFrame()
+	if err != nil {
+		return
+	}
+
+	// Flush render queue to GPU (this also submits the command buffer)
+	if err := w.Runtime.Renderer.Flush(w.Runtime.Backend, cmdBuf, w.Handle); err != nil {
+		return
+	}
 }
 
 func (w *Window) MakeCurrent() {
-	_ = sdl.GL_MakeCurrent(w.Handle, w.Runtime.GLContext)
+	// SDL3 GPU doesn't require making a context current
+	// This is a no-op for GPU rendering
 }
 
 func (w *Window) GetConfig() *WindowConfig {
@@ -81,11 +88,8 @@ func (w *Window) GetConfig() *WindowConfig {
 }
 
 func (w *Window) SetVSync(enabled bool) {
-	if enabled {
-		_ = sdl.GL_SetSwapInterval(1)
-	} else {
-		_ = sdl.GL_SetSwapInterval(0)
-	}
+	// SDL3 GPU handles vertical sync automatically
+	// This is managed at the presentation level
 }
 
 // Draw queues entities for rendering using SDL-backed renderer.

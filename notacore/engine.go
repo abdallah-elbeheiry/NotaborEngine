@@ -121,7 +121,7 @@ func (e *Engine) CreateWindow(cfg *notasdl.WindowConfig) (*notasdl.Window, error
 	}
 
 	win.MakeCurrent()
-	win.Runtime.Backend.Init()
+	// Backend is already initialized during window creation
 
 	if e.settings.Vsync {
 		win.SetVSync(true)

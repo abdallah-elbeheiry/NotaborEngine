@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Zyko0/go-sdl3/sdl"
 	"github.com/go-gl/gl/v4.6-core/gl"
 )
 
@@ -116,4 +117,11 @@ func (t *Texture) Delete() {
 		gl.DeleteTextures(1, &t.ID)
 		t.Loaded = false
 	}
+}
+
+// Bind binds the texture for Vulkan rendering (placeholder for future GPU texture support)
+func (t *Texture) Bind(renderPass *sdl.GPURenderPass) {
+	// This is a placeholder for Vulkan texture binding
+	// In a full implementation, this would bind a Vulkan GPU texture to the render pass
+	// For now, this method exists for API compatibility
 }

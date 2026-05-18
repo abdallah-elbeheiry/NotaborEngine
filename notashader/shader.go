@@ -3,192 +3,226 @@ package notashader
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
+	"sync"
 
-	"github.com/go-gl/gl/v4.6-core/gl"
+	"github.com/Zyko0/go-sdl3/sdl"
+)
+
+type ShaderStage uint32
+
+const (
+	ShaderStageVertex   ShaderStage = ShaderStage(sdl.GPU_SHADERSTAGE_VERTEX)
+	ShaderStageFragment ShaderStage = ShaderStage(sdl.GPU_SHADERSTAGE_FRAGMENT)
+
+	// Uniform constants
+	UseTexture   = "uUseTexture"
+	TextureBind  = "uTextureBind"
+	UseCircle    = "uUseCircle"
+	CircleRadius = "uCircleRadius"
+	CircleEdge   = "uCircleEdge"
+
+	// Default shader paths
+	DefaultVertexShaderPath   = "notashader/shaders/basic.vert"
+	DefaultFragmentShaderPath = "notashader/shaders/basic.frag"
 )
 
 type Shader struct {
+	Device         *sdl.GPUDevice
+	VertexShader   *sdl.GPUShader
+	FragmentShader *sdl.GPUShader
+	Pipeline       *sdl.GPUGraphicsPipeline
+
 	VertexPath   string
 	FragmentPath string
-	Program      uint32
-	Uniforms     map[string]int32
+
+	mu       sync.RWMutex
+	Uniforms map[string]interface{}
 }
 
-const (
-	UseTexture   = "uUseTexture"
-	UseCircle    = "uCircleMask"
-	CircleRadius = "uCircleRadius"
-	CircleEdge   = "uCircleEdge"
-	TextureBind  = "uTexture"
-)
-
-// Load shader source with #include support
-func loadShaderSource(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	src := string(data)
-	dir := filepath.Dir(path)
-	return preprocessIncludes(src, dir)
-}
-
-// Recursively handle #include "file.glsl"
-func preprocessIncludes(src, baseDir string) (string, error) {
-	lines := strings.Split(src, "\n")
-	var out []string
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#include") {
-			file := strings.Trim(line[len("#include"):], ` "`)
-			content, err := loadShaderSource(filepath.Join(baseDir, file))
-			if err != nil {
-				return "", err
-			}
-			out = append(out, content)
-		} else {
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, "\n"), nil
-}
-
-// Create new shader from file paths
+// NewShader creates a shader from pre-compiled SPIR-V files
 func NewShader(vertexPath, fragmentPath string) (*Shader, error) {
 	sh := &Shader{
 		VertexPath:   vertexPath,
 		FragmentPath: fragmentPath,
-		Uniforms:     make(map[string]int32),
+		Uniforms:     make(map[string]interface{}),
 	}
 
 	if err := sh.Reload(); err != nil {
 		return nil, err
 	}
-
 	return sh, nil
 }
 
-// Set uniform dynamically
-func (s *Shader) SetUniform(name string, value interface{}) {
-
-	gl.UseProgram(s.Program)
-
-	loc, ok := s.Uniforms[name]
-	if !ok {
-		loc = gl.GetUniformLocation(s.Program, gl.Str(name+"\x00"))
-		s.Uniforms[name] = loc
-	}
-
-	switch v := value.(type) {
-	case float32:
-		gl.Uniform1f(loc, v)
-	case int32:
-		gl.Uniform1i(loc, v)
-	case bool:
-		if v {
-			gl.Uniform1i(loc, 1)
-		} else {
-			gl.Uniform1i(loc, 0)
-		}
-	case [4]float32:
-		gl.Uniform4f(loc, v[0], v[1], v[2], v[3])
-	case [16]float32:
-		gl.UniformMatrix4fv(loc, 1, false, &v[0])
-	}
-}
-
-func (s *Shader) Clone() *Shader {
-	shader, _ := NewShader(s.VertexPath, s.FragmentPath)
-	return shader
-}
-
-// Compile & reload shader program
+// Reload loads SPIR-V shaders and creates pipeline
 func (s *Shader) Reload() error {
-	vertSrc, err := loadShaderSource(s.VertexPath)
+	vertData, err := os.ReadFile(s.VertexPath)
 	if err != nil {
-		return err
-	}
-	fragSrc, err := loadShaderSource(s.FragmentPath)
-	if err != nil {
-		return err
+		return fmt.Errorf("failed to read vertex shader %s: %w", s.VertexPath, err)
 	}
 
-	newProg := CreateProgram(vertSrc, fragSrc)
-	if s.Program != 0 {
-		gl.DeleteProgram(s.Program) // free old GPU program
+	fragData, err := os.ReadFile(s.FragmentPath)
+	if err != nil {
+		return fmt.Errorf("failed to read fragment shader %s: %w", s.FragmentPath, err)
 	}
-	s.Program = newProg
-	s.Uniforms = make(map[string]int32)
+
+	// Create shaders
+	vertShader, err := s.Device.CreateGPUShader(&sdl.GPUShaderCreateInfo{
+		Code:       vertData,
+		Stage:      sdl.GPU_SHADERSTAGE_VERTEX,
+		Format:     sdl.GPU_SHADERFORMAT_SPIRV,
+		Entrypoint: "main",
+	})
+	if err != nil {
+		s.Device.ReleaseShader(vertShader)
+		return fmt.Errorf("failed to create vertex shader: %v", err)
+	}
+
+	fragShader, err := s.Device.CreateGPUShader(&sdl.GPUShaderCreateInfo{
+		Code:       fragData,
+		Stage:      sdl.GPU_SHADERSTAGE_FRAGMENT,
+		Format:     sdl.GPU_SHADERFORMAT_SPIRV,
+		Entrypoint: "main",
+	})
+	if err != nil {
+		s.Device.ReleaseShader(vertShader)
+		return fmt.Errorf("failed to create fragment shader: %v", err)
+	}
+
+	// Cleanup old resources
+	s.Delete()
+
+	s.VertexShader = vertShader
+	s.FragmentShader = fragShader
+
+	s.mu.Lock()
+	s.Uniforms = make(map[string]interface{})
+	s.mu.Unlock()
+
 	return nil
 }
 
-// Compile shader source
-func compileShader(source string, shaderType uint32) (uint32, error) {
-	shader := gl.CreateShader(shaderType)
-	sources, free := gl.Strs(source + "\x00")
-	defer free()
-	gl.ShaderSource(shader, 1, sources, nil)
-	gl.CompileShader(shader)
-
-	var status int32
-	gl.GetShaderiv(shader, gl.COMPILE_STATUS, &status)
-	if status == gl.FALSE {
-		var logLength int32
-		gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &logLength)
-		log := make([]byte, logLength+1)
-		gl.GetShaderInfoLog(shader, logLength, nil, &log[0])
-		return 0, fmt.Errorf("failed to compile shader: %s", log)
+// BindVulkan binds the pipeline to the current render pass
+func (s *Shader) BindVulkan(renderPass *sdl.GPURenderPass) {
+	if s.Pipeline != nil && renderPass != nil {
+		renderPass.BindGraphicsPipeline(s.Pipeline)
 	}
-	return shader, nil
 }
 
-// Link program
-func CreateProgram(vertexSrc, fragmentSrc string) uint32 {
-	vert, err := compileShader(vertexSrc, gl.VERTEX_SHADER)
-	if err != nil {
-		panic(err)
-	}
-	frag, err := compileShader(fragmentSrc, gl.FRAGMENT_SHADER)
-	if err != nil {
-		panic(err)
-	}
-
-	prog := gl.CreateProgram()
-	gl.AttachShader(prog, vert)
-	gl.AttachShader(prog, frag)
-	gl.LinkProgram(prog)
-
-	var status int32
-	gl.GetProgramiv(prog, gl.LINK_STATUS, &status)
-	if status == gl.FALSE {
-		var logLength int32
-		gl.GetProgramiv(prog, gl.INFO_LOG_LENGTH, &logLength)
-		log := make([]byte, logLength+1)
-		gl.GetProgramInfoLog(prog, logLength, nil, &log[0])
-		panic(fmt.Sprintf("failed to link program: %s", log))
-	}
-
-	gl.DeleteShader(vert)
-	gl.DeleteShader(frag)
-
-	return prog
+// SetUniform stores uniform value (for later push constants / descriptor sets)
+func (s *Shader) SetUniform(name string, value interface{}) {
+	s.mu.Lock()
+	s.Uniforms[name] = value
+	s.mu.Unlock()
 }
 
+// Bind is an alias for BindVulkan for compatibility
 func (s *Shader) Bind() {
-	gl.UseProgram(s.Program)
+	// Placeholder for OpenGL-style binding if needed
 }
 
-func (s *Shader) Unbind() {
-	gl.UseProgram(0)
+// SetUniformVulkan sets uniforms for Vulkan
+func (s *Shader) SetUniformVulkan(name string, value interface{}) {
+	s.SetUniform(name, value)
 }
 
 func (s *Shader) Delete() {
-	if s.Program != 0 {
-		gl.DeleteProgram(s.Program)
-		s.Program = 0
+	if s.VertexShader != nil {
+		s.Device.ReleaseShader(s.VertexShader)
+		s.VertexShader = nil
 	}
-	s.Uniforms = make(map[string]int32)
+	if s.FragmentShader != nil {
+		s.Device.ReleaseShader(s.FragmentShader)
+		s.FragmentShader = nil
+	}
+	if s.Pipeline != nil {
+		s.Device.ReleaseGraphicsPipeline(s.Pipeline)
+		s.Pipeline = nil
+	}
+}
+
+type Material struct {
+	Shader *Shader
+
+	mu       sync.RWMutex
+	uniforms map[string]interface{}
+}
+
+func NewMaterial(shader *Shader) *Material {
+	return &Material{
+		Shader:   shader,
+		uniforms: make(map[string]interface{}),
+	}
+}
+
+// Clone creates a shallow copy of the material that shares the shader but owns an independent uniform set.
+func (m *Material) Clone() *Material {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	clone := &Material{
+		Shader:   m.Shader,
+		uniforms: make(map[string]interface{}, len(m.uniforms)),
+	}
+	for key, value := range m.uniforms {
+		clone.uniforms[key] = value
+	}
+	return clone
+}
+
+func (m *Material) Set(name string, value interface{}) *Material {
+	m.mu.Lock()
+	m.uniforms[name] = value
+	m.mu.Unlock()
+	return m
+}
+
+// Bool Convenience methods
+func (m *Material) Bool(name string, value bool) *Material     { return m.Set(name, value) }
+func (m *Material) Int(name string, value int32) *Material     { return m.Set(name, value) }
+func (m *Material) Float(name string, value float32) *Material { return m.Set(name, value) }
+
+func (m *Material) CircleMask(radius, edge float32) *Material {
+	return m.Bool(UseCircle, true).
+		Float(CircleRadius, radius).
+		Float(CircleEdge, edge)
+}
+
+// NoCircleMask disables the built-in circular mask on the material.
+func (m *Material) NoCircleMask() *Material {
+	return m.Bool(UseCircle, false)
+}
+
+// ApplyVulkan applies material uniforms to a shader for Vulkan rendering
+func (m *Material) ApplyVulkan(textureEnabled bool, renderPass *sdl.GPURenderPass, shader *Shader) {
+	if m == nil || m.Shader == nil {
+		return
+	}
+
+	if shader != nil {
+		shader.BindVulkan(renderPass)
+		shader.SetUniform(UseTexture, textureEnabled)
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		for name, value := range m.uniforms {
+			shader.SetUniform(name, value)
+		}
+	}
+}
+
+// Apply applies material uniforms in a backend-agnostic way
+func (m *Material) Apply(textureEnabled bool) {
+	if m == nil || m.Shader == nil {
+		return
+	}
+
+	m.Shader.Bind()
+	m.Shader.SetUniform(UseTexture, textureEnabled)
+	m.Shader.SetUniform(TextureBind, int32(0))
+	m.Shader.SetUniform(UseCircle, false)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for name, value := range m.uniforms {
+		m.Shader.SetUniform(name, value)
+	}
 }
