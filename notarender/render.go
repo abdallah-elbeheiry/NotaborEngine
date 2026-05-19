@@ -178,6 +178,9 @@ func (b *VulkanBackend) AcquireSwapchainTexture(cmdBuf *sdl.GPUCommandBuffer, wi
 	if swapchainTex == nil {
 		return nil, fmt.Errorf("swapchain texture is nil")
 	}
+	if swapchainTex.Texture == nil {
+		return nil, fmt.Errorf("swapchain texture handle is nil")
+	}
 	return swapchainTex.Texture, nil
 }
 
@@ -278,6 +281,13 @@ func (r *VulkanRenderer) SubmitPolygon(poly *notageometry.Polygon, model notamat
 		Shader:   shader,
 		Material: material,
 	})
+}
+
+// Clear drops queued draw orders that cannot be presented.
+func (r *VulkanRenderer) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.Orders = r.Orders[:0]
 }
 
 // draw batch structure

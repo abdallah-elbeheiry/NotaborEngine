@@ -85,6 +85,11 @@ func (wm *WindowManager) CreateWindow(cfg *WindowConfig) (*Window, error) {
 	if err != nil {
 		return nil, err
 	}
+	sdlWindowID, err := win.ID()
+	if err != nil {
+		win.Destroy()
+		return nil, err
+	}
 
 	// SDL3 GPU device initialization step
 	backend := &notarender.Backend{}
@@ -120,13 +125,12 @@ func (wm *WindowManager) CreateWindow(cfg *WindowConfig) (*Window, error) {
 	rt.Cameras = []*Camera2D{defaultCam}
 
 	w := &Window{
-		ID:            wm.currId,
+		ID:            WindowID(sdlWindowID),
 		Handle:        win,
 		Config:        cfg,
 		Runtime:       &rt,
 		DefaultCamera: defaultCam,
 	}
-	wm.currId++
 
 	if wm.windows == nil {
 		wm.windows = make(map[WindowID]*Window)
@@ -151,6 +155,45 @@ func (wm *WindowManager) PollEvents() {
 				w.ShouldClose = true
 			}
 			wm.emit(Event{Type: EventWindowClose, WindowID: uint32(id)})
+
+		case sdl.EVENT_WINDOW_HIDDEN:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.Hidden = true
+			}
+
+		case sdl.EVENT_WINDOW_SHOWN:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.Hidden = false
+				w.Minimized = false
+			}
+
+		case sdl.EVENT_WINDOW_MINIMIZED:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.Minimized = true
+			}
+
+		case sdl.EVENT_WINDOW_RESTORED:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.Hidden = false
+				w.Minimized = false
+				w.Occluded = false
+			}
+
+		case sdl.EVENT_WINDOW_OCCLUDED:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.Occluded = true
+			}
+
+		case sdl.EVENT_WINDOW_EXPOSED:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.Occluded = false
+			}
 
 		case sdl.EVENT_WINDOW_MOVED:
 			id, _ := ev.Window().ID()

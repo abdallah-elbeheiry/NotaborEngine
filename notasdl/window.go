@@ -54,6 +54,9 @@ type Window struct {
 	DefaultCamera *Camera2D
 
 	ShouldClose bool
+	Hidden      bool
+	Minimized   bool
+	Occluded    bool
 
 	positionMu         sync.Mutex
 	pendingSetPosition bool
@@ -64,11 +67,16 @@ type Window struct {
 }
 
 func (w *Window) RenderFrame() {
-	w.applyPendingWindowPosition()
-
 	now := time.Now()
 	dt := float32(now.Sub(w.Runtime.LastFrame).Seconds())
 	w.Runtime.LastFrame = now
+
+	if !w.canRender() {
+		w.Runtime.Renderer.Clear()
+		return
+	}
+
+	w.applyPendingWindowPosition()
 
 	for _, cam := range w.Runtime.Cameras {
 		cam.Update(dt)
@@ -86,6 +94,15 @@ func (w *Window) RenderFrame() {
 	if err := w.Runtime.Renderer.Flush(w.Runtime.Backend, cmdBuf, w.Handle); err != nil {
 		return
 	}
+}
+
+func (w *Window) canRender() bool {
+	return !w.ShouldClose &&
+		!w.Hidden &&
+		!w.Minimized &&
+		!w.Occluded &&
+		w.Config.W > 0 &&
+		w.Config.H > 0
 }
 
 func (w *Window) MakeCurrent() {
