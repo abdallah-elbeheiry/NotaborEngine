@@ -78,6 +78,7 @@ func (s *Shader) Reload() error {
 		return err
 	}
 
+	// Compile HLSL to SPIR-V using shadercross
 	vertSpv, err := shadercross.CompileSPIRVFromHLSL(&shadercross.HLSLInfo{
 		Source:      string(vertSrc),
 		Entrypoint:  "main",
@@ -96,27 +97,31 @@ func (s *Shader) Reload() error {
 		return fmt.Errorf("fragment compile failed: %w", err)
 	}
 
+	// Create GPU shaders from SPIR-V
 	vertShader, err := s.Device.CreateGPUShader(&sdl.GPUShaderCreateInfo{
-		Code:       vertSpv,
-		Format:     sdl.GPU_SHADERFORMAT_SPIRV,
-		Stage:      sdl.GPU_SHADERSTAGE_VERTEX,
-		Entrypoint: "main",
+		Code:        vertSpv,
+		Format:      sdl.GPU_SHADERFORMAT_SPIRV,
+		Stage:       sdl.GPU_SHADERSTAGE_VERTEX,
+		Entrypoint:  "main",
+		NumSamplers: 0,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create vertex shader: %w", err)
 	}
 
 	fragShader, err := s.Device.CreateGPUShader(&sdl.GPUShaderCreateInfo{
-		Code:       fragSpv,
-		Format:     sdl.GPU_SHADERFORMAT_SPIRV,
-		Stage:      sdl.GPU_SHADERSTAGE_FRAGMENT,
-		Entrypoint: "main",
+		Code:        fragSpv,
+		Format:      sdl.GPU_SHADERFORMAT_SPIRV,
+		Stage:       sdl.GPU_SHADERSTAGE_FRAGMENT,
+		Entrypoint:  "main",
+		NumSamplers: 1,
 	})
 	if err != nil {
 		s.Device.ReleaseShader(vertShader)
-		return err
+		return fmt.Errorf("failed to create fragment shader: %w", err)
 	}
 
+	// Create graphics pipeline with push constants only (no descriptor sets needed)
 	pipeline, err := s.Device.CreateGraphicsPipeline(&sdl.GPUGraphicsPipelineCreateInfo{
 		VertexShader:   vertShader,
 		FragmentShader: fragShader,
@@ -155,7 +160,7 @@ func (s *Shader) Reload() error {
 	if err != nil {
 		s.Device.ReleaseShader(vertShader)
 		s.Device.ReleaseShader(fragShader)
-		return fmt.Errorf("pipeline failed: %w", err)
+		return fmt.Errorf("pipeline creation failed: %w", err)
 	}
 
 	s.VertexShader = vertShader
@@ -170,55 +175,6 @@ func (s *Shader) Bind(rp *sdl.GPURenderPass) {
 		return
 	}
 	rp.BindGraphicsPipeline(s.Pipeline)
-}
-
-type Material struct {
-	Shader *Shader
-
-	UseTexture bool
-	UseCircle  bool
-
-	CircleRadius float32
-	CircleEdge   float32
-
-	mu sync.RWMutex
-}
-
-func NewMaterial(shader *Shader) *Material {
-	return &Material{Shader: shader}
-}
-
-func (m *Material) BuildUniformBuffer() []byte {
-	u := MaterialUniforms{
-		UseTexture:   boolToUint(m.UseTexture),
-		UseCircle:    boolToUint(m.UseCircle),
-		CircleRadius: m.CircleRadius,
-		CircleEdge:   m.CircleEdge,
-	}
-
-	data := make([]byte, 16)
-
-	binary.LittleEndian.PutUint32(data[0:], u.UseTexture)
-	binary.LittleEndian.PutUint32(data[4:], u.UseCircle)
-	binary.LittleEndian.PutUint32(data[8:], math.Float32bits(u.CircleRadius))
-	binary.LittleEndian.PutUint32(data[12:], math.Float32bits(u.CircleEdge))
-
-	return data
-}
-
-func (m *Material) Apply(cmd *sdl.GPUCommandBuffer) {
-	if m == nil || m.Shader == nil {
-		return
-	}
-
-	cmd.PushFragmentUniformData(MaterialBindGroup, m.BuildUniformBuffer())
-}
-
-func boolToUint(v bool) uint32 {
-	if v {
-		return 1
-	}
-	return 0
 }
 
 func (s *Shader) Delete() {
@@ -240,6 +196,55 @@ func (s *Shader) Delete() {
 		s.Pipeline = nil
 	}
 }
+
+type Material struct {
+	Shader *Shader
+
+	UseCircle    bool
+	CircleRadius float32
+	CircleEdge   float32
+
+	mu sync.RWMutex
+}
+
+func NewMaterial(shader *Shader) *Material {
+	return &Material{Shader: shader}
+}
+
+func (m *Material) BuildUniformBuffer() []byte {
+	u := MaterialUniforms{
+		UseTexture:   0, // Textures disabled in this simplified version
+		UseCircle:    boolToUint(m.UseCircle),
+		CircleRadius: m.CircleRadius,
+		CircleEdge:   m.CircleEdge,
+	}
+
+	data := make([]byte, 16)
+	binary.LittleEndian.PutUint32(data[0:], u.UseTexture)
+	binary.LittleEndian.PutUint32(data[4:], u.UseCircle)
+	binary.LittleEndian.PutUint32(data[8:], math.Float32bits(u.CircleRadius))
+	binary.LittleEndian.PutUint32(data[12:], math.Float32bits(u.CircleEdge))
+
+	return data
+}
+
+// Apply applies the material (placeholder for future use)
+func (m *Material) Apply(cmd *sdl.GPUCommandBuffer) {
+	if m == nil || m.Shader == nil {
+		return
+	}
+	// For now, shaders are simple and don't require uniform data
+	// This will be expanded when descriptor sets/push constants are properly set up
+}
+
+func boolToUint(v bool) uint32 {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+// ...existing code...
 
 func (m *Material) CircleMask(radius, edge float32) *Material {
 	if m == nil {
@@ -278,7 +283,6 @@ func (m *Material) Clone() *Material {
 
 	return &Material{
 		Shader:       m.Shader,
-		UseTexture:   m.UseTexture,
 		UseCircle:    m.UseCircle,
 		CircleRadius: m.CircleRadius,
 		CircleEdge:   m.CircleEdge,

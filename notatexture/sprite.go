@@ -4,6 +4,8 @@ import (
 	"NotaborEngine/notageometry"
 	"fmt"
 	"sync"
+
+	"github.com/Zyko0/go-sdl3/sdl"
 )
 
 type Sprite struct {
@@ -43,9 +45,9 @@ func (sm *SpriteManager) Create(name string, texture *Texture) (*Sprite, error) 
 	return sprite, nil
 }
 
-// LoadAndCreate loads a texture and creates a sprite from it
-func (sm *SpriteManager) LoadAndCreate(spriteName, texturePath string) (*Sprite, error) {
-	texture, err := sm.textures.Load(spriteName, texturePath, true)
+// LoadAndCreate loads a texture and creates a sprite from it.
+func (sm *SpriteManager) LoadAndCreate(spriteName, texturePath string, device *sdl.GPUDevice) (*Sprite, error) {
+	texture, err := sm.textures.Load(spriteName, texturePath, device, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load texture: %w", err)
 	}

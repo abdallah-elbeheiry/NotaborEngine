@@ -59,6 +59,8 @@ type VulkanBackend struct {
 	Device               *sdl.GPUDevice
 	VertexBuffer         *sdl.GPUBuffer
 	TransferBuffer       *sdl.GPUTransferBuffer
+	DefaultSampler       *sdl.GPUSampler
+	WhiteTexture         *notatexture.Texture
 	MaxVertices          int
 	CurrentVertexCount   int
 	vertexData           []Vertex2D
@@ -103,6 +105,28 @@ func (b *VulkanBackend) Init(windowWidth, windowHeight uint32) error {
 	if err != nil {
 		return fmt.Errorf("failed to create transfer buffer: %w", err)
 	}
+
+	b.DefaultSampler, err = b.Device.CreateSampler(&sdl.GPUSamplerCreateInfo{
+		MinFilter:    sdl.GPU_FILTER_LINEAR,
+		MagFilter:    sdl.GPU_FILTER_LINEAR,
+		MipmapMode:   sdl.GPU_SAMPLERMIPMAPMODE_LINEAR,
+		AddressModeU: sdl.GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+		AddressModeV: sdl.GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+		AddressModeW: sdl.GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create default sampler: %w", err)
+	}
+
+	whiteTexture := &notatexture.Texture{
+		Width:     1,
+		Height:    1,
+		ImageData: []byte{255, 255, 255, 255},
+	}
+	if err := whiteTexture.CreateGPUTexture(b.Device); err != nil {
+		return fmt.Errorf("failed to create default white texture: %w", err)
+	}
+	b.WhiteTexture = whiteTexture
 
 	b.vertexData = make([]Vertex2D, 0, b.MaxVertices)
 	return nil
@@ -164,6 +188,12 @@ func (b *VulkanBackend) Shutdown() {
 	}
 	if b.TransferBuffer != nil {
 		b.Device.ReleaseTransferBuffer(b.TransferBuffer)
+	}
+	if b.DefaultSampler != nil {
+		b.Device.ReleaseSampler(b.DefaultSampler)
+	}
+	if b.WhiteTexture != nil {
+		b.WhiteTexture.Delete()
 	}
 	if b.Device != nil {
 		b.Device.Destroy()
@@ -267,6 +297,12 @@ func (r *VulkanRenderer) Flush(backend *VulkanBackend, cmdBuf *sdl.GPUCommandBuf
 	r.Orders = r.Orders[:0]
 	r.mu.Unlock()
 
+	// Render-pass state does not persist across frames, so cached bindings
+	// must be invalidated before we start issuing draw calls for a new pass.
+	r.currentShader = nil
+	r.currentMaterial = nil
+	r.currentTexture = nil
+
 	if len(orders) == 0 {
 		return nil
 	}
@@ -329,31 +365,33 @@ func (r *VulkanRenderer) Flush(backend *VulkanBackend, cmdBuf *sdl.GPUCommandBuf
 
 	// Draw batches
 	for _, batch := range batches {
-		if batch.material != nil {
-			if batch.material != r.currentMaterial || batch.texture != r.currentTexture {
-
-				batch.material.Apply(cmdBuf)
-
-				r.currentMaterial = batch.material
-				r.currentShader = batch.material.Shader
-			}
-		} else if batch.shader != r.currentShader {
-
+		// Bind shader pipeline if needed
+		if batch.shader != r.currentShader {
 			batch.shader.Bind(renderPass)
-
 			r.currentShader = batch.shader
-			r.currentMaterial = nil
 		}
 
-		if batch.texture != r.currentTexture {
-
-			if batch.texture != nil {
-				batch.texture.Bind(renderPass)
+		// Apply material (uniforms, etc.) if it has changed
+		if batch.material != r.currentMaterial || batch.texture != r.currentTexture {
+			if batch.material != nil {
+				batch.material.Apply(cmdBuf)
 			}
-
-			r.currentTexture = batch.texture
+			r.currentMaterial = batch.material
 		}
 
+		// Bind texture if needed
+		boundTexture := batch.texture
+		if boundTexture == nil || boundTexture.GPUTexture == nil {
+			boundTexture = backend.WhiteTexture
+		}
+		if boundTexture != r.currentTexture {
+			if boundTexture != nil {
+				boundTexture.Bind(renderPass, backend.DefaultSampler)
+			}
+			r.currentTexture = boundTexture
+		}
+
+		// Bind and draw
 		renderPass.BindVertexBuffers([]sdl.GPUBufferBinding{
 			{Buffer: backend.VertexBuffer, Offset: 0},
 		})

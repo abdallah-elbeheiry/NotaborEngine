@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unsafe"
 
 	"github.com/Zyko0/go-sdl3/sdl"
 	"github.com/go-gl/gl/v4.6-core/gl"
@@ -20,6 +21,10 @@ type Texture struct {
 	Height    int32
 	ImageData []byte // Store raw pixel data
 	Loaded    bool   // Whether OpenGL texture is created
+
+	Device     *sdl.GPUDevice
+	GPUTexture *sdl.GPUTexture
+	GPULoaded  bool
 }
 
 // LoadImageData loads image data from file
@@ -75,6 +80,95 @@ func LoadImageData(path string) (*Texture, error) {
 	}, nil
 }
 
+// CreateGPUTexture creates an SDL GPU texture from the stored image data.
+func (t *Texture) CreateGPUTexture(device *sdl.GPUDevice) error {
+	if t == nil {
+		return fmt.Errorf("texture is nil")
+	}
+	if device == nil {
+		return fmt.Errorf("GPU device is nil")
+	}
+	if t.GPULoaded && t.GPUTexture != nil {
+		return nil
+	}
+	if t.ImageData == nil {
+		return fmt.Errorf("no image data to upload")
+	}
+
+	gpuTex, err := device.CreateTexture(&sdl.GPUTextureCreateInfo{
+		Type:              sdl.GPU_TEXTURETYPE_2D,
+		Format:            sdl.GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+		Usage:             sdl.GPU_TEXTUREUSAGE_SAMPLER,
+		Width:             uint32(t.Width),
+		Height:            uint32(t.Height),
+		LayerCountOrDepth: 1,
+		NumLevels:         1,
+		SampleCount:       sdl.GPU_SAMPLECOUNT_1,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create GPU texture: %w", err)
+	}
+
+	uploadSize := uint32(len(t.ImageData))
+	transferBuffer, err := device.CreateTransferBuffer(&sdl.GPUTransferBufferCreateInfo{
+		Usage: sdl.GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+		Size:  uploadSize,
+	})
+	if err != nil {
+		device.ReleaseTexture(gpuTex)
+		return fmt.Errorf("failed to create transfer buffer: %w", err)
+	}
+
+	ptr, err := device.MapTransferBuffer(transferBuffer, false)
+	if err != nil {
+		device.ReleaseTransferBuffer(transferBuffer)
+		device.ReleaseTexture(gpuTex)
+		return fmt.Errorf("failed to map transfer buffer: %w", err)
+	}
+
+	copy(
+		unsafe.Slice((*byte)(unsafe.Pointer(ptr)), len(t.ImageData)),
+		t.ImageData,
+	)
+	device.UnmapTransferBuffer(transferBuffer)
+
+	cmdBuf, err := device.AcquireCommandBuffer()
+	if err != nil {
+		device.ReleaseTransferBuffer(transferBuffer)
+		device.ReleaseTexture(gpuTex)
+		return fmt.Errorf("failed to acquire command buffer: %w", err)
+	}
+
+	copyPass := cmdBuf.BeginCopyPass()
+	copyPass.UploadToGPUTexture(
+		&sdl.GPUTextureTransferInfo{
+			TransferBuffer: transferBuffer,
+			Offset:         0,
+		},
+		&sdl.GPUTextureRegion{
+			Texture: gpuTex,
+			W:       uint32(t.Width),
+			H:       uint32(t.Height),
+			D:       1,
+		},
+		false,
+	)
+	copyPass.End()
+
+	if err := cmdBuf.Submit(); err != nil {
+		device.ReleaseTransferBuffer(transferBuffer)
+		device.ReleaseTexture(gpuTex)
+		return fmt.Errorf("failed to submit texture upload: %w", err)
+	}
+
+	device.ReleaseTransferBuffer(transferBuffer)
+
+	t.Device = device
+	t.GPUTexture = gpuTex
+	t.GPULoaded = true
+	return nil
+}
+
 // CreateGLTexture creates the actual OpenGL texture from stored image data
 func (t *Texture) CreateGLTexture() error {
 	if t.Loaded {
@@ -113,15 +207,27 @@ func (t *Texture) CreateGLTexture() error {
 }
 
 func (t *Texture) Delete() {
+	if t.GPUTexture != nil && t.Device != nil {
+		t.Device.ReleaseTexture(t.GPUTexture)
+		t.GPUTexture = nil
+		t.GPULoaded = false
+	}
 	if t.Loaded {
 		gl.DeleteTextures(1, &t.ID)
 		t.Loaded = false
 	}
 }
 
-// Bind binds the texture for Vulkan rendering (placeholder for future GPU texture support)
-func (t *Texture) Bind(renderPass *sdl.GPURenderPass) {
-	// This is a placeholder for Vulkan texture binding
-	// In a full implementation, this would bind a Vulkan GPU texture to the render pass
-	// For now, this method exists for API compatibility
+// Bind binds the texture for SDL GPU fragment sampling.
+func (t *Texture) Bind(renderPass *sdl.GPURenderPass, sampler *sdl.GPUSampler) {
+	if t == nil || renderPass == nil || sampler == nil || t.GPUTexture == nil {
+		return
+	}
+
+	renderPass.BindFragmentSamplers([]sdl.GPUTextureSamplerBinding{
+		{
+			Texture: t.GPUTexture,
+			Sampler: sampler,
+		},
+	})
 }
