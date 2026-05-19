@@ -152,6 +152,12 @@ func (wm *WindowManager) PollEvents() {
 			}
 			wm.emit(Event{Type: EventWindowClose, WindowID: uint32(id)})
 
+		case sdl.EVENT_WINDOW_MOVED:
+			id, _ := ev.Window().ID()
+			if w, ok := wm.windows[WindowID(id)]; ok {
+				w.setCachedPosition(int(ev.WindowEvent().Data1), int(ev.WindowEvent().Data2))
+			}
+
 		case sdl.EVENT_WINDOW_RESIZED:
 			id, _ := ev.Window().ID()
 			if w, ok := wm.windows[WindowID(id)]; ok {

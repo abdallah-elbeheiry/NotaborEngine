@@ -166,6 +166,7 @@ func (t *Texture) CreateGPUTexture(device *sdl.GPUDevice) error {
 	t.Device = device
 	t.GPUTexture = gpuTex
 	t.GPULoaded = true
+	t.ImageData = nil
 	return nil
 }
 
@@ -203,6 +204,7 @@ func (t *Texture) CreateGLTexture() error {
 	gl.BindTexture(gl.TEXTURE_2D, 0)
 
 	t.Loaded = true
+	t.ImageData = nil
 	return nil
 }
 

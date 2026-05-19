@@ -304,7 +304,7 @@ func (r *VulkanRenderer) Flush(backend *VulkanBackend, cmdBuf *sdl.GPUCommandBuf
 	r.currentTexture = nil
 
 	if len(orders) == 0 {
-		return nil
+		return cmdBuf.Cancel()
 	}
 
 	backend.vertexData = backend.vertexData[:0]
@@ -343,11 +343,13 @@ func (r *VulkanRenderer) Flush(backend *VulkanBackend, cmdBuf *sdl.GPUCommandBuf
 
 	// Upload vertex data in a copy pass
 	if err := backend.UploadVertexData(cmdBuf, backend.vertexData); err != nil {
+		_ = cmdBuf.Cancel()
 		return err
 	}
 
 	swapchainTexture, err := backend.AcquireSwapchainTexture(cmdBuf, window)
 	if err != nil {
+		_ = cmdBuf.Cancel()
 		return err
 	}
 
@@ -360,6 +362,7 @@ func (r *VulkanRenderer) Flush(backend *VulkanBackend, cmdBuf *sdl.GPUCommandBuf
 
 	renderPass := cmdBuf.BeginRenderPass([]sdl.GPUColorTargetInfo{colorTarget}, nil)
 	if renderPass == nil {
+		_ = cmdBuf.Cancel()
 		return fmt.Errorf("failed to begin render pass")
 	}
 

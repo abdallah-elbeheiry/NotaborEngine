@@ -163,9 +163,26 @@ func (s *Shader) Reload() error {
 		return fmt.Errorf("pipeline creation failed: %w", err)
 	}
 
+	// Preserve old resources so we can release them after the new pipeline is bound.
+	oldVert := s.VertexShader
+	oldFrag := s.FragmentShader
+	oldPipe := s.Pipeline
+
+	// Assign new resources
 	s.VertexShader = vertShader
 	s.FragmentShader = fragShader
 	s.Pipeline = pipeline
+
+	// Release previous resources (if any) to avoid leaking GPU objects.
+	if oldVert != nil {
+		s.Device.ReleaseShader(oldVert)
+	}
+	if oldFrag != nil {
+		s.Device.ReleaseShader(oldFrag)
+	}
+	if oldPipe != nil {
+		s.Device.ReleaseGraphicsPipeline(oldPipe)
+	}
 
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"NotaborEngine/notashader"
 	"NotaborEngine/notatask"
 	"NotaborEngine/notatexture"
+	"sync"
 	"time"
 
 	"github.com/Zyko0/go-sdl3/sdl"
@@ -53,9 +54,18 @@ type Window struct {
 	DefaultCamera *Camera2D
 
 	ShouldClose bool
+
+	positionMu         sync.Mutex
+	pendingSetPosition bool
+	pendingX           int
+	pendingY           int
+	pendingMoveX       int
+	pendingMoveY       int
 }
 
 func (w *Window) RenderFrame() {
+	w.applyPendingWindowPosition()
+
 	now := time.Now()
 	dt := float32(now.Sub(w.Runtime.LastFrame).Seconds())
 	w.Runtime.LastFrame = now
@@ -118,6 +128,44 @@ func (w *Window) SetPosition(x, y int) {
 		return
 	}
 
+	w.positionMu.Lock()
+	w.pendingSetPosition = true
+	w.pendingX = x
+	w.pendingY = y
+	w.pendingMoveX = 0
+	w.pendingMoveY = 0
+	w.positionMu.Unlock()
+}
+
+func (w *Window) applyPendingWindowPosition() {
+	w.positionMu.Lock()
+	if !w.pendingSetPosition && w.pendingMoveX == 0 && w.pendingMoveY == 0 {
+		w.positionMu.Unlock()
+		return
+	}
+
+	x := w.Config.X
+	y := w.Config.Y
+	if w.pendingSetPosition {
+		x = w.pendingX
+		y = w.pendingY
+	}
+	x += w.pendingMoveX
+	y += w.pendingMoveY
+
+	w.pendingSetPosition = false
+	w.pendingMoveX = 0
+	w.pendingMoveY = 0
+	w.positionMu.Unlock()
+
+	_ = w.setPositionNow(x, y)
+}
+
+func (w *Window) setPositionNow(x, y int) error {
+	if w.Handle == nil {
+		return nil
+	}
+
 	bounds := w.getCurrentDisplayBounds()
 
 	minX := -w.Config.W + 50
@@ -138,8 +186,17 @@ func (w *Window) SetPosition(x, y int) {
 		y = maxY
 	}
 
-	_ = w.Handle.SetPosition(int32(x), int32(y))
+	if err := w.Handle.SetPosition(int32(x), int32(y)); err != nil {
+		return err
+	}
 
+	w.setCachedPosition(x, y)
+	return nil
+}
+
+func (w *Window) setCachedPosition(x, y int) {
+	w.positionMu.Lock()
+	defer w.positionMu.Unlock()
 	w.Config.X = x
 	w.Config.Y = y
 }
@@ -149,8 +206,11 @@ func (w *Window) Move(dx, dy int) {
 	if w.Handle == nil {
 		return
 	}
-	x, y := w.GetPosition()
-	w.SetPosition(x+dx, y+dy)
+
+	w.positionMu.Lock()
+	w.pendingMoveX += dx
+	w.pendingMoveY += dy
+	w.positionMu.Unlock()
 }
 
 // Helper to get current display bounds
@@ -170,9 +230,19 @@ func (w *Window) getCurrentDisplayBounds() *sdl.Rect {
 
 // GetPosition returns current window position
 func (w *Window) GetPosition() (x, y int) {
-	if w.Handle != nil {
-		px, py, _ := w.Handle.Position()
-		return int(px), int(py)
+	if w.Handle == nil {
+		return w.Config.X, w.Config.Y
 	}
-	return w.Config.X, w.Config.Y
+
+	w.positionMu.Lock()
+	defer w.positionMu.Unlock()
+
+	x = w.Config.X
+	y = w.Config.Y
+	if w.pendingSetPosition {
+		x = w.pendingX
+		y = w.pendingY
+	}
+
+	return x + w.pendingMoveX, y + w.pendingMoveY
 }
