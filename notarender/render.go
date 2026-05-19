@@ -16,10 +16,12 @@ import (
 
 // Vertex2D defines a 2D vertex with position, color, UV, and local position
 type Vertex2D struct {
-	Pos      notamath.Po2
-	Color    notacolor.Color
-	UV       notamath.Vec2
-	LocalPos notamath.Po2
+	Pos        notamath.Po2
+	Color      notacolor.Color
+	UV         notamath.Vec2
+	LocalPos   notamath.Po2
+	CircleMask notamath.Vec2
+	UseCircle  float32
 }
 
 type DrawOrder struct {
@@ -271,6 +273,17 @@ func (r *VulkanRenderer) SubmitPolygon(poly *notageometry.Polygon, model notamat
 	tris := Triangulate2D(renderData.Vertices)
 	if len(tris) == 0 {
 		return
+	}
+
+	if material != nil {
+		useCircle, radius, edge := material.CircleParams()
+		if useCircle {
+			for i := range tris {
+				tris[i].UseCircle = 1
+				tris[i].CircleMask.X = radius
+				tris[i].CircleMask.Y = edge
+			}
+		}
 	}
 
 	r.mu.Lock()

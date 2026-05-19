@@ -31,6 +31,8 @@ const (
 	MaterialBinding   = 0
 )
 
+const vertex2DPitch = 52
+
 type MaterialUniforms struct {
 	UseTexture   uint32
 	UseCircle    uint32
@@ -132,9 +134,11 @@ func (s *Shader) Reload() error {
 				{Location: 1, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT4, Offset: 8},
 				{Location: 2, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT2, Offset: 24},
 				{Location: 3, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT2, Offset: 32},
+				{Location: 4, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT2, Offset: 40},
+				{Location: 5, BufferSlot: 0, Format: sdl.GPU_VERTEXELEMENTFORMAT_FLOAT, Offset: 48},
 			},
 			VertexBufferDescriptions: []sdl.GPUVertexBufferDescription{
-				{Slot: 0, Pitch: 40, InputRate: sdl.GPU_VERTEXINPUTRATE_VERTEX},
+				{Slot: 0, Pitch: vertex2DPitch, InputRate: sdl.GPU_VERTEXINPUTRATE_VERTEX},
 			},
 		},
 
@@ -152,7 +156,18 @@ func (s *Shader) Reload() error {
 
 		TargetInfo: sdl.GPUGraphicsPipelineTargetInfo{
 			ColorTargetDescriptions: []sdl.GPUColorTargetDescription{
-				{Format: s.ColorTargetFormat},
+				{
+					Format: s.ColorTargetFormat,
+					BlendState: sdl.GPUColorTargetBlendState{
+						SrcColorBlendfactor: sdl.GPU_BLENDFACTOR_SRC_ALPHA,
+						DstColorBlendfactor: sdl.GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+						ColorBlendOp:        sdl.GPU_BLENDOP_ADD,
+						SrcAlphaBlendfactor: sdl.GPU_BLENDFACTOR_ONE,
+						DstAlphaBlendfactor: sdl.GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+						AlphaBlendOp:        sdl.GPU_BLENDOP_ADD,
+						EnableBlend:         true,
+					},
+				},
 			},
 		},
 	})
@@ -229,6 +244,9 @@ func NewMaterial(shader *Shader) *Material {
 }
 
 func (m *Material) BuildUniformBuffer() []byte {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	u := MaterialUniforms{
 		UseTexture:   0, // Textures disabled in this simplified version
 		UseCircle:    boolToUint(m.UseCircle),
@@ -243,6 +261,16 @@ func (m *Material) BuildUniformBuffer() []byte {
 	binary.LittleEndian.PutUint32(data[12:], math.Float32bits(u.CircleEdge))
 
 	return data
+}
+
+func (m *Material) CircleParams() (bool, float32, float32) {
+	if m == nil {
+		return false, 0, 0
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.UseCircle, m.CircleRadius, m.CircleEdge
 }
 
 // Apply applies the material (placeholder for future use)

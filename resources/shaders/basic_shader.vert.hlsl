@@ -3,12 +3,16 @@ struct VS_INPUT {
     float4 color    : COLOR0;
     float2 uv       : TEXCOORD0;
     float2 localPos : TEXCOORD1;
+    float2 circleMask : TEXCOORD2;
+    float useCircle : TEXCOORD3;
 };
 
 struct VS_OUTPUT {
     float4 color    : COLOR0;
     float2 uv       : TEXCOORD0;
     float2 localPos : TEXCOORD1;
+    float2 circleMask : TEXCOORD2;
+    float useCircle : TEXCOORD3;
     float4 position : SV_POSITION;
 };
 
@@ -22,6 +26,8 @@ VS_OUTPUT main(VS_INPUT input) {
     output.color    = input.color;
     output.uv       = input.uv;
     output.localPos = input.localPos;
+    output.circleMask = input.circleMask;
+    output.useCircle = input.useCircle;
 
     return output;
 }
